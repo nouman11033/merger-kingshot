@@ -119,18 +119,24 @@ export function computeStats(
 ): PrimeStats {
   const totalPower = prime.reduce((sum, entry) => sum + entry.player.power, 0);
   const primeCount = prime.length;
+  const active = players.filter((player) => player.active);
+  const unselectedPower = active
+    .filter((player) => !player.selected)
+    .reduce((sum, player) => sum + player.power, 0);
 
   const allianceStats: AllianceStat[] = alliances
     .slice()
     .sort((a, b) => a.slotNumber - b.slotNumber)
     .map((alliance) => {
-      const members = players.filter((player) => player.allianceId === alliance.id && player.active);
+      const members = active.filter((player) => player.allianceId === alliance.id);
+      const unselected = members.filter((player) => !player.selected);
       return {
         slotNumber: alliance.slotNumber,
         allianceTag: alliance.allianceTag,
         allianceName: alliance.allianceName,
         totalPlayers: members.length,
         selectedCount: members.filter((player) => player.selected).length,
+        unselectedPower: unselected.reduce((sum, player) => sum + player.power, 0),
       };
     });
 
@@ -139,6 +145,7 @@ export function computeStats(
     primeLimit,
     remainingSlots: Math.max(primeLimit - primeCount, 0),
     totalPower,
+    unselectedPower,
     averagePower: primeCount > 0 ? Math.round(totalPower / primeCount) : 0,
     isFull: primeCount >= primeLimit,
     allianceStats,

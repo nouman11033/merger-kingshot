@@ -6,7 +6,7 @@ import clsx from "clsx";
 import { OfficerSelect } from "@/components/OfficerSelect";
 import { PlayerRow } from "@/components/PlayerRow";
 import { Badge, Button, Card, SLOT_THEME } from "@/components/ui";
-import { formatPower, formatRelativeTime } from "@/lib/roster";
+import { formatExactPower, formatPower, formatRelativeTime } from "@/lib/roster";
 import type { Alliance, Player } from "@/types/roster";
 
 interface AllianceRosterProps {
@@ -14,6 +14,7 @@ interface AllianceRosterProps {
   players: Player[];
   totalPlayers: number;
   selectedCount: number;
+  unselectedPower: number;
   officerTotal: number;
   officerSelected: number;
   officerBusy: boolean;
@@ -32,6 +33,7 @@ function AllianceRosterComponent({
   players,
   totalPlayers,
   selectedCount,
+  unselectedPower,
   officerTotal,
   officerSelected,
   officerBusy,
@@ -73,6 +75,12 @@ function AllianceRosterComponent({
             <Badge className={clsx(theme.border, theme.bg, theme.text)}>
               {selectedCount} selected
             </Badge>
+            <p
+              className="tabular text-[11px] text-muted-foreground"
+              title={`${formatExactPower(unselectedPower)} outside Prime`}
+            >
+              {formatPower(unselectedPower)} not selected
+            </p>
             <p className="tabular text-[11px] text-muted-foreground">{totalPlayers} members</p>
             <OfficerSelect
               id={`officers-${alliance.id}`}

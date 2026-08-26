@@ -890,6 +890,7 @@ export function MergePlanner({
                 players={filteredByAlliance.get(alliance.id) ?? []}
                 totalPlayers={allianceStat?.totalPlayers ?? 0}
                 selectedCount={allianceStat?.selectedCount ?? 0}
+                unselectedPower={allianceStat?.unselectedPower ?? 0}
                 officerTotal={officerStats.byAlliance.get(alliance.id)?.total ?? 0}
                 officerSelected={officerStats.byAlliance.get(alliance.id)?.selected ?? 0}
                 officerBusy={officerBusy}

@@ -56,6 +56,12 @@ function StatsBarComponent({ stats }: { stats: PrimeStats }) {
         title={formatExactPower(stats.totalPower)}
       />
       <Stat
+        label="Not selected"
+        value={formatPower(stats.unselectedPower)}
+        sub="Players outside Prime"
+        title={formatExactPower(stats.unselectedPower)}
+      />
+      <Stat
         label="Average Power"
         value={formatPower(stats.averagePower)}
         sub="Per Prime member"
@@ -68,7 +74,8 @@ function StatsBarComponent({ stats }: { stats: PrimeStats }) {
             key={alliance.slotNumber}
             label={`${theme.label} · ${alliance.allianceTag}`}
             value={`${alliance.selectedCount} selected`}
-            sub={`of ${alliance.totalPlayers} members`}
+            sub={`${formatPower(alliance.unselectedPower)} not selected`}
+            title={`${alliance.selectedCount} of ${alliance.totalPlayers} members · ${formatExactPower(alliance.unselectedPower)} outside Prime`}
             accent={theme.text}
             dot={theme.dot}
           />

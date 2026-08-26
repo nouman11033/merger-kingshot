@@ -87,6 +87,7 @@ export interface AllianceStat {
   allianceName: string;
   totalPlayers: number;
   selectedCount: number;
+  unselectedPower: number;
 }
 
 export interface PrimeStats {
@@ -94,6 +95,7 @@ export interface PrimeStats {
   primeLimit: number;
   remainingSlots: number;
   totalPower: number;
+  unselectedPower: number;
   averagePower: number;
   isFull: boolean;
   allianceStats: AllianceStat[];
