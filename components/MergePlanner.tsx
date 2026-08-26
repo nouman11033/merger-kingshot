@@ -884,27 +884,23 @@ export function MergePlanner({
               (stat) => stat.slotNumber === alliance.slotNumber,
             );
             return (
-              <div
+              <AllianceRoster
                 key={alliance.id}
-                className="min-h-[18rem] max-h-[36rem] max-lg:h-[min(36rem,70dvh)] max-lg:overflow-hidden"
-              >
-                <AllianceRoster
-                  alliance={alliance}
-                  players={filteredByAlliance.get(alliance.id) ?? []}
-                  totalPlayers={allianceStat?.totalPlayers ?? 0}
-                  selectedCount={allianceStat?.selectedCount ?? 0}
-                  officerTotal={officerStats.byAlliance.get(alliance.id)?.total ?? 0}
-                  officerSelected={officerStats.byAlliance.get(alliance.id)?.selected ?? 0}
-                  officerBusy={officerBusy}
-                  primeRanks={primeRanks}
-                  primeFull={stats.isFull}
-                  now={now}
-                  expanded={rosterDetails}
-                  onToggle={toggleSelection}
-                  onToggleOfficers={(next) => void applyOfficerSelection(next, alliance.id)}
-                  onClear={() => void clearAllianceSelections(alliance.id)}
-                />
-              </div>
+                alliance={alliance}
+                players={filteredByAlliance.get(alliance.id) ?? []}
+                totalPlayers={allianceStat?.totalPlayers ?? 0}
+                selectedCount={allianceStat?.selectedCount ?? 0}
+                officerTotal={officerStats.byAlliance.get(alliance.id)?.total ?? 0}
+                officerSelected={officerStats.byAlliance.get(alliance.id)?.selected ?? 0}
+                officerBusy={officerBusy}
+                primeRanks={primeRanks}
+                primeFull={stats.isFull}
+                now={now}
+                expanded={rosterDetails}
+                onToggle={toggleSelection}
+                onToggleOfficers={(next) => void applyOfficerSelection(next, alliance.id)}
+                onClear={() => void clearAllianceSelections(alliance.id)}
+              />
             );
           })}
         </div>
