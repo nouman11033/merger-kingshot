@@ -30,6 +30,8 @@ import { HOME_KINGDOM_ID, TOP_ALLIANCE_LIMIT } from "@/types/roster";
  *   Members:  uid, governor_id, fid, nick_name, power, town_center_level, kills,
  *             alliance_rank, alliance_rank_label, kid, avatar_url,
  *             last_active_at, online
+ *   Roster `kills` is often null. Gaps are filled from
+ *   GET /v1/kingdoms/{kid}/ranks?board=kills (top 100 in the kingdom).
  *   Wrapper:  ok, include, fresh, cached_at, age_seconds
  *   Errors:   401 invalid key, 404 unknown alliance, 429 rate limited
  *
@@ -455,7 +457,7 @@ export function normalizeMember(
       allianceRankLabel: rankLabel,
       kingdomId: toStringOrNull(pick(raw, ["kid", "kingdom_id", "kingdom"])) ?? fallbackKingdomId,
       townCenterLevel: toPositiveInt(pick(raw, ["town_center_level", "tc_level", "tc"])),
-      kills: toNumber(pick(raw, ["kills"])),
+      kills: toNumber(pick(raw, ["kills", "kill_count", "kill_score", "kills_score"])),
       online: toBooleanOrNull(pick(raw, ["online"])),
       lastActiveAt: toIsoOrNull(pick(raw, ["last_active_at", "last_active", "last_login"])),
       avatarUrl: toStringOrNull(pick(raw, ["avatar_url", "avatar"])),
@@ -610,6 +612,103 @@ export interface RosterFetchOptions {
   force?: boolean;
 }
 
+const killsBoardCache = new Map<string, { scores: Map<string, number>; fetchedAt: number }>();
+const killsBoardInFlight = new Map<string, Promise<Map<string, number>>>();
+
+/** Roster `kills` is a different scale on some payloads (~billions). Drop those. */
+const PLAUSIBLE_KILL_COUNT_MAX = 50_000_000;
+
+function looksLikePlayerRank(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const hasId = pick(value, ["uid", "governor_id", "fid"]) !== undefined;
+  const hasScore = pick(value, ["score", "kills"]) !== undefined;
+  return hasId && hasScore;
+}
+
+function findPlayerRankRows(payload: unknown): unknown[] | null {
+  if (!isRecord(payload)) return null;
+  const board = isRecord(payload.board) ? payload.board : null;
+  if (board && Array.isArray(board.rows) && (board.rows.length === 0 || looksLikePlayerRank(board.rows[0]))) {
+    return board.rows;
+  }
+  const boards = Array.isArray(payload.boards) ? payload.boards : [];
+  const killsBoard = boards.find(
+    (item) =>
+      isRecord(item) &&
+      Array.isArray(item.rows) &&
+      (toStringOrNull(item.key) === "kills" || toStringOrNull(item.board) === "kills"),
+  );
+  if (isRecord(killsBoard) && Array.isArray(killsBoard.rows)) return killsBoard.rows;
+  for (const candidate of [payload.rows, payload.ranks, payload.entries, payload.items, payload.data]) {
+    if (Array.isArray(candidate) && (candidate.length === 0 || looksLikePlayerRank(candidate[0]))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * Top 100 kingdom kill scores, keyed by uid:/gov:/fid: so they match roster
+ * external ids. One extra API call per kingdom; cached like alliance ranks.
+ */
+async function getKingdomKillScores(kingdomId: string): Promise<Map<string, number>> {
+  const key = `${kingdomId}/kills/100`;
+  const cached = killsBoardCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.scores;
+  const pending = killsBoardInFlight.get(key);
+  if (pending) return pending;
+
+  const request = (async () => {
+    const scores = new Map<string, number>();
+    try {
+      const payload = await requestJson(`/kingdoms/${encodeURIComponent(kingdomId)}/ranks`, {
+        board: "kills",
+        limit: "100",
+      });
+      const rows = findPlayerRankRows(payload) ?? [];
+      for (const raw of rows) {
+        if (!isRecord(raw)) continue;
+        const score = toNumber(pick(raw, ["score", "kills"]));
+        if (score === null || score < 0) continue;
+        const uid = toStringOrNull(pick(raw, ["uid"]));
+        const gov = toStringOrNull(pick(raw, ["governor_id", "fid"]));
+        if (uid) scores.set(`uid:${uid}`, score);
+        if (gov) {
+          scores.set(`gov:${gov}`, score);
+          scores.set(`fid:${gov}`, score);
+        }
+      }
+    } catch {
+      // Roster fetch still succeeds; kills stay whatever the roster payload had.
+    }
+    killsBoardCache.set(key, { scores, fetchedAt: Date.now() });
+    return scores;
+  })();
+
+  killsBoardInFlight.set(key, request);
+  try {
+    return await request;
+  } finally {
+    killsBoardInFlight.delete(key);
+  }
+}
+
+async function applyKingdomKillScores(members: NormalizedMember[], kingdomId: string): Promise<void> {
+  const scores = await getKingdomKillScores(kingdomId);
+  if (scores.size === 0) return;
+
+  for (const member of members) {
+    const fromBoard = scores.get(member.externalId);
+    if (fromBoard != null) {
+      member.kills = fromBoard;
+      continue;
+    }
+    if (member.kills != null && member.kills > PLAUSIBLE_KILL_COUNT_MAX) {
+      member.kills = null;
+    }
+  }
+}
+
 /**
  * Fetches and normalizes one alliance roster. Server-side only.
  *
@@ -670,6 +769,8 @@ export async function getAllianceRoster(
         { status: 404, code: "empty_roster" },
       );
     }
+
+    await applyKingdomKillScores(roster.members, kingdom);
 
     rosterCache.set(key, { roster, fetchedAt: Date.now() });
     return roster;

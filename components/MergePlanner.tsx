@@ -884,7 +884,10 @@ export function MergePlanner({
               (stat) => stat.slotNumber === alliance.slotNumber,
             );
             return (
-              <div key={alliance.id} className="max-h-[36rem] min-h-[18rem]">
+              <div
+                key={alliance.id}
+                className="min-h-[18rem] max-h-[36rem] max-lg:h-[min(36rem,70dvh)] max-lg:overflow-hidden"
+              >
                 <AllianceRoster
                   alliance={alliance}
                   players={filteredByAlliance.get(alliance.id) ?? []}

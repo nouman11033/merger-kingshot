@@ -48,10 +48,10 @@ function AllianceRosterComponent({
   const listPower = players.reduce((sum, player) => sum + player.power, 0);
 
   return (
-    <Card className="flex min-h-0 flex-col overflow-hidden">
+    <Card className="flex h-full min-h-0 flex-col overflow-hidden">
       <header
         className={clsx(
-          "sticky top-0 z-10 border-b border-border bg-card/95 px-3 py-2.5 backdrop-blur",
+          "border-b border-border bg-card/95 px-3 py-2.5 backdrop-blur lg:sticky lg:top-0 lg:z-10",
           theme.border,
         )}
       >
