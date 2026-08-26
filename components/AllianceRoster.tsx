@@ -5,7 +5,7 @@ import clsx from "clsx";
 
 import { OfficerSelect } from "@/components/OfficerSelect";
 import { PlayerRow } from "@/components/PlayerRow";
-import { Badge, Card, SLOT_THEME } from "@/components/ui";
+import { Badge, Button, Card, SLOT_THEME } from "@/components/ui";
 import { formatPower, formatRelativeTime } from "@/lib/roster";
 import type { Alliance, Player } from "@/types/roster";
 
@@ -23,6 +23,7 @@ interface AllianceRosterProps {
   expanded?: boolean;
   onToggle: (playerId: string, next: boolean) => void;
   onToggleOfficers: (next: boolean) => void;
+  onClear: () => void;
 }
 
 /** One alliance column: always sorted by Alliance Rank ascending. */
@@ -40,6 +41,7 @@ function AllianceRosterComponent({
   expanded = false,
   onToggle,
   onToggleOfficers,
+  onClear,
 }: AllianceRosterProps) {
   const theme = SLOT_THEME[alliance.slotNumber];
   const hiddenByFilters = totalPlayers - players.length;
@@ -80,6 +82,14 @@ function AllianceRosterComponent({
               compact
               onChange={onToggleOfficers}
             />
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onClear}
+              disabled={selectedCount === 0 || officerBusy}
+            >
+              Clear all
+            </Button>
           </div>
         </div>
       </header>

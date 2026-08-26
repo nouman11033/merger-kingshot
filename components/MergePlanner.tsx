@@ -387,6 +387,84 @@ export function MergePlanner({
     [applyPlayers, notify, session.id, session.primeLimit],
   );
 
+  /** Uncheck every selected player in one alliance. Other alliances are untouched. */
+  const clearAllianceSelections = useCallback(
+    async (allianceId: string) => {
+      if (officerBusyRef.current) return;
+
+      const targets = playersRef.current.filter(
+        (player) => player.allianceId === allianceId && player.selected,
+      );
+      if (targets.length === 0) return;
+
+      const alliance = alliancesRef.current.find((item) => item.id === allianceId);
+      const tag = alliance?.allianceTag ? `[${alliance.allianceTag}]` : "this alliance";
+      const ids = new Set(targets.map((player) => player.id));
+      const previous = new Map(targets.map((player) => [player.id, player.selected]));
+      const writtenAt = new Date().toISOString();
+
+      officerBusyRef.current = true;
+      setOfficerBusy(true);
+      for (const player of targets) pendingWritesRef.current.set(player.id, false);
+      applyPlayers((list) =>
+        list.map((player) => (ids.has(player.id) ? { ...player, selected: false } : player)),
+      );
+
+      try {
+        const { error } = await getSupabaseBrowserClient()
+          .from(SELECTIONS_TABLE)
+          .upsert(
+            targets.map((player) => ({
+              merge_session_id: session.id,
+              player_id: player.id,
+              selected: false,
+              updated_at: writtenAt,
+            })),
+            { onConflict: "merge_session_id,player_id" },
+          );
+
+        for (const player of targets) {
+          if (pendingWritesRef.current.get(player.id) === false) {
+            pendingWritesRef.current.delete(player.id);
+          }
+        }
+
+        if (error) {
+          applyPlayers((list) =>
+            list.map((player) =>
+              previous.has(player.id) ? { ...player, selected: previous.get(player.id)! } : player,
+            ),
+          );
+          notify(`Could not clear ${tag}: ${error.message}`, "error");
+          return;
+        }
+
+        const stamp = Date.parse(writtenAt);
+        for (const player of targets) selectionClockRef.current.set(player.id, stamp);
+        notify(
+          `Unselected ${targets.length} player${targets.length === 1 ? "" : "s"} in ${tag}.`,
+          "success",
+        );
+      } catch (error) {
+        for (const player of targets) {
+          if (pendingWritesRef.current.get(player.id) === false) {
+            pendingWritesRef.current.delete(player.id);
+          }
+        }
+        applyPlayers((list) =>
+          list.map((player) =>
+            previous.has(player.id) ? { ...player, selected: previous.get(player.id)! } : player,
+          ),
+        );
+        notify(error instanceof Error ? error.message : `Could not clear ${tag}.`, "error");
+      } finally {
+        officerBusyRef.current = false;
+        setOfficerBusy(false);
+      }
+    },
+    [applyPlayers, notify, session.id],
+  );
+
   const refreshRanking = useCallback(async () => {
     if (!apiConfigured) return;
     setRankingRefreshing(true);
@@ -821,6 +899,7 @@ export function MergePlanner({
                   expanded={rosterDetails}
                   onToggle={toggleSelection}
                   onToggleOfficers={(next) => void applyOfficerSelection(next, alliance.id)}
+                  onClear={() => void clearAllianceSelections(alliance.id)}
                 />
               </div>
             );
