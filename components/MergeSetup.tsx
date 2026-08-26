@@ -125,7 +125,7 @@ export function MergeSetup({
   const [csvTags, setCsvTags] = useState(["", "", ""]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [sessionName, setSessionName] = useState("");
-  const [mode, setMode] = useState<"api" | "csv">(apiConfigured ? "api" : "csv");
+  const mode: "api" | "csv" = apiConfigured ? "api" : "csv";
 
   const [ranking, setRanking] = useState<KingdomAllianceRank[]>(initialRanking);
   const [rankingAt, setRankingAt] = useState<string | null>(rankingRetrievedAt);
@@ -318,14 +318,7 @@ export function MergeSetup({
             </div>
           ) : null}
 
-          {!apiConfigured ? (
-            <div className="p-4">
-              <Alert tone="warning" title="Kingshot API key not configured">
-                Add <code className="font-mono">KINGSHOT_API_KEY</code> to{" "}
-                <code className="font-mono">.env.local</code> and restart, or import CSVs below.
-              </Alert>
-            </div>
-          ) : ranking.length === 0 ? (
+          {ranking.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
               {rankingError ? "Could not load the ranking." : "No alliances returned for this kingdom."}
             </div>
@@ -454,35 +447,19 @@ export function MergeSetup({
       )}
 
       <Card className="p-4">
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-          <Field
-            label="Merge session name"
-            htmlFor="session-name"
-            hint={`Optional. Defaults to something like “Kingdom ${HOME_KINGDOM_ID} Merge (RCB + HEA)”.`}
-          >
-            <Input
-              id="session-name"
-              value={sessionName}
-              onChange={(event) => setSessionName(event.target.value)}
-              placeholder={`Kingdom ${HOME_KINGDOM_ID} Merge`}
-              maxLength={120}
-            />
-          </Field>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant={mode === "api" ? "primary" : "secondary"}
-              onClick={() => setMode("api")}
-              disabled={!apiConfigured}
-              title={apiConfigured ? undefined : "KINGSHOT_API_KEY is not configured on the server"}
-            >
-              Fetch from Kingshot API
-            </Button>
-            <Button variant={mode === "csv" ? "primary" : "secondary"} onClick={() => setMode("csv")}>
-              Import CSV instead
-            </Button>
-          </div>
-        </div>
+        <Field
+          label="Merge session name"
+          htmlFor="session-name"
+          hint={`Optional. Defaults to something like “Kingdom ${HOME_KINGDOM_ID} Merge (RCB + HEA)”.`}
+        >
+          <Input
+            id="session-name"
+            value={sessionName}
+            onChange={(event) => setSessionName(event.target.value)}
+            placeholder={`Kingdom ${HOME_KINGDOM_ID} Merge`}
+            maxLength={120}
+          />
+        </Field>
 
         {displayError ? (
           <div className="mt-3">

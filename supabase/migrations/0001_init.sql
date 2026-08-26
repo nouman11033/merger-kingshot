@@ -246,7 +246,14 @@ create policy selections_update on public.merge_player_selections
 -- default privileges, so this migration produces the same security posture on
 -- any Postgres and the intent is auditable in one place. Policies above decide
 -- *which rows*; these grants decide *which verbs* are possible at all.
-grant usage on schema public to anon, authenticated;
+grant usage on schema public to anon, authenticated, service_role;
+
+-- Server writes (create session, sync rosters, clear Prime) use the service
+-- role, which bypasses RLS but still needs table grants.
+grant all on table public.merge_sessions            to service_role;
+grant all on table public.alliances                 to service_role;
+grant all on table public.players                   to service_role;
+grant all on table public.merge_player_selections   to service_role;
 
 -- Read access is required for Realtime: a subscriber only receives changes for
 -- tables it may select from.
