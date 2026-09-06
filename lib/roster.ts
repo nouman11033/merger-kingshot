@@ -7,6 +7,7 @@ import type {
   PrimeStats,
   RosterFilters,
 } from "@/types/roster";
+import { allianceTagsMatch } from "@/types/roster";
 
 /** Pure derivation helpers. Prime is always computed, never stored. */
 
@@ -75,15 +76,16 @@ export function alliancesRankedAbove(
   ours: KingdomAllianceRank[];
   ourBest: KingdomAllianceRank | null;
 } {
-  const tags = new Set(ours.map((alliance) => alliance.allianceTag.trim().toUpperCase()));
-  const oursOnBoard = ranking.filter((row) => tags.has(row.tag.trim().toUpperCase()));
+  const oursOnBoard = ranking.filter((row) =>
+    ours.some((alliance) => allianceTagsMatch(alliance.allianceTag, row.tag)),
+  );
   const ourBest = oursOnBoard.reduce<KingdomAllianceRank | null>(
     (best, row) => (best === null || row.rank < best.rank ? row : best),
     null,
   );
   const above = ourBest
     ? ranking.filter((row) => row.rank < ourBest.rank)
-    : ranking.filter((row) => !tags.has(row.tag.trim().toUpperCase()));
+    : ranking.filter((row) => !ours.some((alliance) => allianceTagsMatch(alliance.allianceTag, row.tag)));
   return { above, ours: oursOnBoard, ourBest };
 }
 

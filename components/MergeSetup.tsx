@@ -9,6 +9,8 @@ import { useToast } from "@/components/Toaster";
 import { Alert, Badge, Button, Card, Field, Input, SLOT_THEME, SectionTitle, Spinner } from "@/components/ui";
 import { formatPower, formatRelativeTime } from "@/lib/roster";
 import {
+  allianceTagsMatch,
+  EXAMPLE_ALLIANCE_TAGS,
   HOME_KINGDOM_ID,
   type AllianceSlot,
   type CsvImportPayload,
@@ -125,7 +127,6 @@ export function MergeSetup({
   const [csvTags, setCsvTags] = useState(["", "", ""]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [sessionName, setSessionName] = useState("");
-  const mode: "api" | "csv" = apiConfigured ? "api" : "csv";
 
   const [ranking, setRanking] = useState<KingdomAllianceRank[]>(initialRanking);
   const [rankingAt, setRankingAt] = useState<string | null>(rankingRetrievedAt);
@@ -137,6 +138,9 @@ export function MergeSetup({
   const [error, setError] = useState<RequestFailure | null>(null);
   const [previews, setPreviews] = useState<RosterPreview[] | null>(null);
 
+  const apiLive = apiConfigured && ranking.length > 0 && rankingError === null;
+  const mode: "api" | "csv" = apiLive ? "api" : "csv";
+  const apiOutage = apiConfigured && !apiLive;
   const mergeSize: MergeSize = mode === "api" ? ((selectedTags.length === 3 ? 3 : 2) as MergeSize) : csvMergeSize;
 
   const slots = useMemo(() => {
@@ -185,6 +189,8 @@ export function MergeSetup({
       setRankingAt(result.retrievedAt);
       notify(`Loaded top ${result.alliances.length} alliances in kingdom ${HOME_KINGDOM_ID}.`, "success");
     } catch (cause) {
+      setRanking([]);
+      setRankingAt(null);
       setRankingError(toFailure(cause, "Could not load the kingdom ranking."));
     } finally {
       setRefreshing(false);
@@ -266,13 +272,32 @@ export function MergeSetup({
         <div>
           <SectionTitle>Kingdom {HOME_KINGDOM_ID}</SectionTitle>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Pick 2 or 3 alliances from the current top 10 by power
+            {mode === "api"
+              ? "Pick 2 or 3 alliances from the current top 10 by power"
+              : "Enter alliance tags and import one CSV per roster. Name and Power columns are required."}
           </p>
         </div>
-        <Badge className="border-primary/40 bg-primary/10 text-primary">
-          Kingdom {HOME_KINGDOM_ID}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          {apiOutage && apiConfigured ? (
+            <Button size="sm" variant="ghost" onClick={() => void refreshRanking()} disabled={refreshing}>
+              {refreshing ? <Spinner /> : null}
+              {refreshing ? "Checking API…" : "Retry Kingshot API"}
+            </Button>
+          ) : null}
+          <Badge className="border-primary/40 bg-primary/10 text-primary">
+            Kingdom {HOME_KINGDOM_ID}
+          </Badge>
+        </div>
       </div>
+
+      {apiOutage ? (
+        <Alert tone="warning" title="Kingshot Stats is unreachable">
+          There is no public replacement for the roster API. Import CSVs to keep planning — export from
+          the in-game alliance member list, or from any tool that can save Name and Power columns.
+          If the API comes back, use Retry Kingshot API to switch this screen back.
+        </Alert>
+      ) : null}
+
 
       {mode === "api" ? (
         <Card className="overflow-hidden">
@@ -300,7 +325,7 @@ export function MergeSetup({
             <div className="flex flex-wrap gap-1.5 border-b border-border px-4 py-2.5">
               {selectedTags.map((tag, index) => {
                 const theme = SLOT_THEME[(index + 1) as AllianceSlot];
-                const row = ranking.find((alliance) => alliance.tag === tag);
+                const row = ranking.find((alliance) => allianceTagsMatch(alliance.tag, tag));
                 return (
                   <span
                     key={tag}
@@ -431,7 +456,7 @@ export function MergeSetup({
                               setCsvTags((current) => current.map((tag, tagIndex) => (tagIndex === index ? value : tag)));
                               setPreviews(null);
                             }}
-                            placeholder={["RCB", "HEA", "TOP"][index]}
+                            placeholder={EXAMPLE_ALLIANCE_TAGS[index]}
                             autoComplete="off"
                             spellCheck={false}
                           />
@@ -450,7 +475,7 @@ export function MergeSetup({
         <Field
           label="Merge session name"
           htmlFor="session-name"
-          hint={`Optional. Defaults to something like “Kingdom ${HOME_KINGDOM_ID} Merge (RCB + HEA)”.`}
+          hint={`Optional. Defaults to something like “Kingdom ${HOME_KINGDOM_ID} Merge (${EXAMPLE_ALLIANCE_TAGS[0]} + ${EXAMPLE_ALLIANCE_TAGS[1]})”.`}
         >
           <Input
             id="session-name"
@@ -544,8 +569,10 @@ export function MergeSetup({
         ) : (
           <div className="mt-4 flex flex-col gap-3">
             <p className="text-xs text-muted-foreground">
-              Upload one CSV per alliance. Kingdom {HOME_KINGDOM_ID} is applied automatically. A player
-              name and a power column are required.
+              Upload one CSV per alliance. Kingdom {HOME_KINGDOM_ID} is applied automatically.
+              Required columns: <span className="font-semibold text-foreground">Name</span> and{" "}
+              <span className="font-semibold text-foreground">Power</span>. Optional: Rank, Player
+              ID, HQ, Kills. Use the sample file if you are starting from a spreadsheet.
             </p>
             <CsvImporter
               slots={slots}

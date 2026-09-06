@@ -55,14 +55,21 @@ export default async function HomePage() {
             <Badge className="border-primary/40 bg-primary/10 text-primary">
               Alliance merge tooling
             </Badge>
-            <Badge>{apiConfigured ? "Kingshot API connected" : "CSV mode"}</Badge>
+            <Badge>
+              {ranking.error
+                ? "CSV fallback · Kingshot Stats down"
+                : apiConfigured
+                  ? "Kingshot API connected"
+                  : "CSV mode"}
+            </Badge>
           </div>
           <h1 className="font-heading text-3xl font-black tracking-[0.12em] text-foreground uppercase sm:text-4xl">
             Kingshot Merge Planner
           </h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Kingdom {HOME_KINGDOM_ID} merge planner. Pick 2 or 3 alliances from the top 10, then
-            build a shared 100-player Prime roster in realtime.
+            Kingdom {HOME_KINGDOM_ID} merge planner. When Kingshot Stats is up, pick 2 or 3
+            alliances from the top 10. While it is down, import one CSV per alliance and build
+            the same 100-player Prime roster in realtime.
           </p>
         </header>
 

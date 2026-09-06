@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       results.push({
         slotNumber,
         kingdomId,
-        allianceTag,
+        allianceTag: roster.info.tag || allianceTag,
         allianceName: roster.info.name,
         leaderName: roster.info.leaderName,
         alliancePower: roster.info.power,

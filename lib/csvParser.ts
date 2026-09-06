@@ -1,6 +1,6 @@
 import Papa from "papaparse";
 
-import { normalizeKey, toNonNegativeInt, toPositiveInt, toStringOrNull } from "@/lib/coerce";
+import { normalizeKey, toNonNegativeInt, toNumber, toPositiveInt, toStringOrNull } from "@/lib/coerce";
 import type { CsvColumnMapping, CsvParseResult, NormalizedMember } from "@/types/roster";
 
 /**
@@ -19,6 +19,9 @@ const NAME_CANDIDATES = [
   "nick_name",
   "governor",
   "governor name",
+  "lord",
+  "lord name",
+  "ign",
 ];
 
 const POWER_CANDIDATES = [
@@ -28,6 +31,7 @@ const POWER_CANDIDATES = [
   "combat power",
   "might",
   "score",
+  "cp",
 ];
 
 const RANK_CANDIDATES = [
@@ -48,6 +52,19 @@ const ID_CANDIDATES = [
   "fid",
   "lord id",
 ];
+
+const HQ_CANDIDATES = [
+  "hq",
+  "hq level",
+  "tc",
+  "tc level",
+  "town center",
+  "town center level",
+  "furnace",
+  "furnace level",
+];
+
+const KILLS_CANDIDATES = ["kills", "kill count", "killpoints", "kill points", "kp"];
 
 function detectColumn(headers: string[], candidates: string[]): string | null {
   const normalizedHeaders = headers.map((header) => ({ header, key: normalizeKey(header) }));
@@ -74,13 +91,21 @@ export function detectMapping(headers: string[]): CsvColumnMapping {
     power: detectColumn(headers, POWER_CANDIDATES),
     rank: detectColumn(headers, RANK_CANDIDATES),
     id: detectColumn(headers, ID_CANDIDATES),
+    hq: detectColumn(headers, HQ_CANDIDATES),
+    kills: detectColumn(headers, KILLS_CANDIDATES),
   };
 }
 
 function stableIdFor(name: string, index: number, explicitId: string | null): string {
-  if (explicitId) return `csv:${explicitId}`;
-  // Without a source id, identity falls back to a name slug. This is stated in
-  // the UI: re-importing after a rename creates a new player row.
+  if (explicitId) {
+    if (/^(uid|gov|fid|csv|id):/i.test(explicitId)) return explicitId;
+    // Numeric game IDs match the Kingshot Stats identity namespace, so a later
+    // API sync can keep Prime ticks instead of treating everyone as new.
+    if (/^\d+$/.test(explicitId)) return `uid:${explicitId}`;
+    return `csv:${explicitId}`;
+  }
+  // Without a source id, identity falls back to a name slug. Re-importing after
+  // a rename creates a new player row.
   const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
   return `csv:${slug || "row"}-${index + 1}`;
 }
@@ -106,11 +131,14 @@ export function rowsToMembers(
     if (seen.has(externalId)) externalId = `${externalId}-${index + 1}`;
     seen.add(externalId);
 
+    const mappedHeaders = new Set(
+      [mapping.name, mapping.power, mapping.rank, mapping.id, mapping.hq, mapping.kills].filter(
+        (header): header is string => Boolean(header),
+      ),
+    );
     const metadata: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(row)) {
-      if (key === mapping.name || key === mapping.power || key === mapping.rank || key === mapping.id) {
-        continue;
-      }
+      if (mappedHeaders.has(key)) continue;
       const text = toStringOrNull(value);
       if (text) metadata[key] = text;
     }
@@ -122,8 +150,8 @@ export function rowsToMembers(
       allianceRank: mapping.rank ? toPositiveInt(row[mapping.rank]) : null,
       allianceRankLabel: null,
       kingdomId,
-      townCenterLevel: null,
-      kills: null,
+      townCenterLevel: mapping.hq ? toPositiveInt(row[mapping.hq]) : null,
+      kills: mapping.kills ? toNumber(row[mapping.kills]) : null,
       online: null,
       lastActiveAt: null,
       avatarUrl: null,
@@ -192,7 +220,7 @@ export function parseCsvFile(file: File, kingdomId: string): Promise<CsvParseRes
         resolve({
           fileName: file.name,
           headers: [],
-          mapping: { name: null, power: null, rank: null, id: null },
+          mapping: { name: null, power: null, rank: null, id: null, hq: null, kills: null },
           rows: [],
           previewRows: [],
           skippedRows: 0,

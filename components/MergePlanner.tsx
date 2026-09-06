@@ -7,6 +7,7 @@ import clsx from "clsx";
 import { AllianceRoster } from "@/components/AllianceRoster";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
+import { CsvImporter } from "@/components/CsvImporter";
 import { FilterBar } from "@/components/FilterBar";
 import { KingdomLadder } from "@/components/KingdomLadder";
 import { OfficerSelect } from "@/components/OfficerSelect";
@@ -34,6 +35,7 @@ import { useMergeRealtime, type RealtimeBatch } from "@/hooks/useMergeRealtime";
 import { SELECTIONS_TABLE } from "@/types/database";
 import type {
   Alliance,
+  CsvImportPayload,
   KingdomAllianceRank,
   MergeSnapshot,
   Player,
@@ -78,6 +80,7 @@ export function MergePlanner({
   const [rosterDetails, setRosterDetails] = useState(false);
   const [officerBusy, setOfficerBusy] = useState(false);
   const officerBusyRef = useRef(false);
+  const [importingCsv, setImportingCsv] = useState(false);
   const [ranking, setRanking] = useState<KingdomAllianceRank[]>(initialRanking);
   const [rankingAt, setRankingAt] = useState<string | null>(rankingRetrievedAt);
   const [rankingError, setRankingError] = useState<string | null>(null);
@@ -183,6 +186,8 @@ export function MergePlanner({
     () => alliances.some((alliance) => alliance.source !== "csv"),
     [alliances],
   );
+  const rankingLive = ranking.length > 0;
+  const showCsvFallback = !rankingLive || !hasApiAlliance;
 
   const officerStats = useMemo(() => {
     const all = officerPlayers(players);
@@ -485,6 +490,8 @@ export function MergePlanner({
       setRankingAt(payload.retrievedAt ?? new Date().toISOString());
       setRankingError(null);
     } catch (error) {
+      setRanking([]);
+      setRankingAt(null);
       setRankingError(
         error instanceof Error ? error.message : "Could not load the kingdom ranking.",
       );
@@ -677,6 +684,43 @@ export function MergePlanner({
     }
   }, [applySnapshot, notify, refreshRanking, session.id]);
 
+  const importCsvRosters = useCallback(
+    async (payloads: CsvImportPayload[]) => {
+      setImportingCsv(true);
+      setSyncError(null);
+      try {
+        const response = await fetch(`/api/sessions/${session.id}/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imports: payloads }),
+        });
+        const payload = (await response.json().catch(() => null)) as
+          | ({ ok: boolean; error?: string; reports: SyncReport[] } & MergeSnapshot)
+          | null;
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error ?? `CSV import failed (${response.status}).`);
+        }
+
+        applySnapshot({
+          session: payload.session,
+          alliances: payload.alliances,
+          players: payload.players,
+        });
+        setSyncReports(payload.reports);
+        setNow(Date.now());
+        const total = payload.reports.reduce((sum, report) => sum + report.total, 0);
+        notify(`Imported ${total} players from CSV.`, "success");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "CSV import failed.";
+        setSyncError(message);
+        notify(message, "error");
+      } finally {
+        setImportingCsv(false);
+      }
+    },
+    [applySnapshot, notify, session.id],
+  );
+
   const runClear = useCallback(async () => {
     setClearing(true);
     const previous = playersRef.current;
@@ -774,9 +818,11 @@ export function MergePlanner({
                 status={syncStatus}
                 disabled={!apiConfigured || !hasApiAlliance}
                 disabledReason={
-                  apiConfigured
-                    ? "Every alliance here was imported from CSV, so there is nothing to sync from the Kingshot API."
-                    : "KINGSHOT_API_KEY is not configured on the server."
+                  !apiConfigured
+                    ? "KINGSHOT_API_KEY is not configured on the server."
+                    : !rankingLive
+                      ? "Kingshot Stats is unreachable. Import CSVs below to refresh rosters."
+                      : "Every alliance here was imported from CSV, so there is nothing to sync from the Kingshot API."
                 }
                 onSync={() => void runSync()}
               />
@@ -787,9 +833,37 @@ export function MergePlanner({
         {!apiConfigured ? (
           <Alert tone="warning" title="Roster sync unavailable">
             The server has no <code className="font-mono">KINGSHOT_API_KEY</code>, so
-            <span className="font-semibold"> Sync Rosters</span> is disabled. Realtime collaboration
-            still works.
+            <span className="font-semibold"> Sync Rosters</span> is disabled. Import CSVs below to
+            load or refresh alliance rosters. Realtime collaboration still works.
           </Alert>
+        ) : !rankingLive ? (
+          <Alert tone="warning" title="Kingshot Stats is unreachable">
+            Fetch and Sync need that API, which is currently down. Import one CSV per alliance below
+            to keep this merge session current.
+          </Alert>
+        ) : null}
+
+        {showCsvFallback ? (
+          <Card className="flex flex-col gap-3 p-4">
+            <div>
+              <SectionTitle>Refresh rosters from CSV</SectionTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Upload a file for each alliance you want to replace. Required columns: Name and
+                Power. Include Player ID if you want Prime ticks to survive a later API sync.
+              </p>
+            </div>
+            <CsvImporter
+              slots={alliances.map((alliance) => ({
+                slotNumber: alliance.slotNumber,
+                kingdomId: alliance.kingdomId,
+                allianceTag: alliance.allianceTag,
+                allianceName: alliance.allianceName,
+              }))}
+              busy={importingCsv}
+              submitLabel="Replace rosters from CSV"
+              onImport={importCsvRosters}
+            />
+          </Card>
         ) : null}
 
         {syncError ? (

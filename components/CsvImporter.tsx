@@ -163,6 +163,16 @@ export function CsvImporter({
                   >
                     Player ID → {result.mapping.id ?? "generated from name"}
                   </Badge>
+                  {result.mapping.hq ? (
+                    <Badge className="border-emerald-500/40 bg-emerald-500/10 text-emerald-200">
+                      HQ → {result.mapping.hq}
+                    </Badge>
+                  ) : null}
+                  {result.mapping.kills ? (
+                    <Badge className="border-emerald-500/40 bg-emerald-500/10 text-emerald-200">
+                      Kills → {result.mapping.kills}
+                    </Badge>
+                  ) : null}
                   {result.skippedRows > 0 ? (
                     <Badge className="border-amber-500/40 bg-amber-500/10 text-amber-200">
                       {result.skippedRows} rows skipped
@@ -214,6 +224,13 @@ export function CsvImporter({
       })}
 
       <div className="flex flex-wrap items-center gap-3">
+        <a
+          href="/alliance-roster-template.csv"
+          download
+          className="text-xs font-semibold text-primary underline-offset-4 hover:underline"
+        >
+          Download sample CSV
+        </a>
         <Button variant="primary" onClick={() => void submit()} disabled={!canSubmit} aria-busy={busy}>
           {busy ? <Spinner /> : null}
           {submitLabel}

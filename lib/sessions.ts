@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAllianceRoster, invalidateRosterCache } from "@/lib/kingshot";
+import { getAllianceRoster, getKingdomAllianceRanks, invalidateRosterCache, KingshotApiError } from "@/lib/kingshot";
 import { mapAlliance, mapPlayer, mapSession } from "@/lib/mappers";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import {
@@ -26,7 +26,7 @@ import type {
   NormalizedRoster,
   SyncReport,
 } from "@/types/roster";
-import { PRIME_LIMIT } from "@/types/roster";
+import { canonicalAllianceTag, PRIME_LIMIT } from "@/types/roster";
 
 /** Server-side persistence for merge sessions, rosters and selections. */
 
@@ -60,14 +60,17 @@ export function validateAllianceInputs(mergeSize: MergeSize, inputs: AllianceInp
     }
     if (!allianceTag) throw new AppError(`Alliance ${slotNumber}: alliance tag is required.`);
 
+    const resolvedTag = canonicalAllianceTag(allianceTag);
+
     // Tags are case-sensitive in the API, so only exact pairs are duplicates.
-    const key = `${kingdomId}::${allianceTag}`;
+    // Renames (RCB → SUN) count as the same alliance.
+    const key = `${kingdomId}::${resolvedTag.toUpperCase()}`;
     if (seen.has(key)) {
-      throw new AppError(`Alliance [${allianceTag}] in kingdom ${kingdomId} was entered twice.`);
+      throw new AppError(`Alliance [${resolvedTag}] in kingdom ${kingdomId} was entered twice.`);
     }
     seen.add(key);
 
-    return { slotNumber, kingdomId, allianceTag };
+    return { slotNumber, kingdomId, allianceTag: resolvedTag };
   });
 
   return cleaned.sort((a, b) => a.slotNumber - b.slotNumber);
@@ -318,6 +321,7 @@ async function updateAllianceMeta(
   const { error } = await supabase
     .from(ALLIANCES_TABLE)
     .update({
+      alliance_tag: roster?.info.tag || alliance.alliance_tag,
       alliance_name: roster?.info.name || alliance.alliance_name || alliance.alliance_tag,
       external_alliance_id: roster?.info.externalAllianceId ?? alliance.external_alliance_id,
       power: roster?.info.power ?? null,
@@ -358,15 +362,17 @@ export async function syncSession(sessionId: string): Promise<SyncReport[]> {
 
   // Sequential on purpose: the API allows 60 requests/minute and we stay polite.
   for (const alliance of apiAlliances) {
-    const roster = await getAllianceRoster(alliance.kingdom_id, alliance.alliance_tag, {
-      force: true,
-    });
+    const { roster, warnings } = await loadRosterForAlliance(alliance);
+    const resolvedTag = roster.info.tag || canonicalAllianceTag(alliance.alliance_tag);
     const counts = await persistRoster(alliance, roster.members);
     await updateAllianceMeta(alliance, roster, roster.members.length, "api");
+    if (resolvedTag !== alliance.alliance_tag) {
+      await rewriteSessionNameTag(sessionId, alliance.alliance_tag, resolvedTag);
+    }
 
     reports.push({
       slotNumber: alliance.slot_number as AllianceSlot,
-      allianceTag: alliance.alliance_tag,
+      allianceTag: resolvedTag,
       kingdomId: alliance.kingdom_id,
       allianceName: roster.info.name,
       total: roster.members.length,
@@ -374,12 +380,53 @@ export async function syncSession(sessionId: string): Promise<SyncReport[]> {
       cachedAt: roster.cachedAt,
       ageSeconds: roster.ageSeconds,
       retrievedAt: roster.retrievedAt,
-      warnings: roster.warnings,
+      warnings: [...roster.warnings, ...warnings],
       ...counts,
     });
   }
 
   return reports;
+}
+
+async function loadRosterForAlliance(
+  alliance: AllianceRow,
+): Promise<{ roster: NormalizedRoster; warnings: string[] }> {
+  const warnings: string[] = [];
+  const requestedTag = alliance.alliance_tag;
+
+  try {
+    const roster = await getAllianceRoster(alliance.kingdom_id, requestedTag, { force: true });
+    if (roster.info.tag && roster.info.tag !== requestedTag) {
+      warnings.push(`Alliance tag updated from [${requestedTag}] to [${roster.info.tag}].`);
+    }
+    return { roster, warnings };
+  } catch (error) {
+    const missing =
+      error instanceof KingshotApiError &&
+      (error.code === "alliance_not_found" || error.code === "empty_roster");
+    if (!missing || !alliance.external_alliance_id) throw error;
+
+    const ranking = await getKingdomAllianceRanks(alliance.kingdom_id, { force: true, limit: 50 });
+    const match = ranking.alliances.find(
+      (row) => row.externalAllianceId && row.externalAllianceId === alliance.external_alliance_id,
+    );
+    if (!match) throw error;
+
+    const roster = await getAllianceRoster(alliance.kingdom_id, match.tag, { force: true });
+    warnings.push(`Alliance tag updated from [${requestedTag}] to [${match.tag}].`);
+    return { roster, warnings };
+  }
+}
+
+async function rewriteSessionNameTag(sessionId: string, fromTag: string, toTag: string): Promise<void> {
+  if (!fromTag || !toTag || fromTag === toTag) return;
+  const session = await getSession(sessionId);
+  if (!session || !session.name.includes(fromTag)) return;
+
+  const supabase = getSupabaseAdmin();
+  const name = session.name.split(fromTag).join(toTag).slice(0, 120);
+  const { error } = await supabase.from(SESSIONS_TABLE).update({ name }).eq("id", sessionId);
+  if (error) fail("Could not update the merge session name", error);
 }
 
 /** CSV fallback: writes an uploaded roster into the same tables as the API path. */
@@ -404,7 +451,7 @@ export async function importCsvRoster(
   if (!alliance) throw new AppError(`Alliance slot ${payload.slotNumber} is not configured.`, 404);
 
   const kingdomId = payload.kingdomId?.trim() || alliance.kingdom_id;
-  const allianceTag = payload.allianceTag?.trim() || alliance.alliance_tag;
+  const allianceTag = canonicalAllianceTag(payload.allianceTag?.trim() || alliance.alliance_tag);
   const allianceName = payload.allianceName?.trim() || allianceTag;
 
   const { error: metaError } = await supabase

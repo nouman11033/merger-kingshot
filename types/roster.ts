@@ -8,6 +8,55 @@ export const PRIME_LIMIT = 100;
 export const HOME_KINGDOM_ID = "2362";
 export const TOP_ALLIANCE_LIMIT = 10;
 
+/**
+ * Alliance tags that changed in this kingdom. Old tags still work in stored
+ * sessions and CSV input; API calls and ranking matches use the current tag.
+ */
+export const ALLIANCE_TAG_RENAMES: Record<string, string> = {
+  RCB: "SUN",
+};
+
+export const EXAMPLE_ALLIANCE_TAGS = ["SUN", "HEA", "TOP"] as const;
+
+/** Current Kingshot tag for a stored or typed value (`RCB` → `SUN`). */
+export function canonicalAllianceTag(tag: string): string {
+  const trimmed = tag.trim();
+  if (!trimmed) return trimmed;
+  return ALLIANCE_TAG_RENAMES[trimmed] ?? ALLIANCE_TAG_RENAMES[trimmed.toUpperCase()] ?? trimmed;
+}
+
+export function allianceTagKey(tag: string): string {
+  return canonicalAllianceTag(tag).toUpperCase();
+}
+
+export function allianceTagsMatch(left: string, right: string): boolean {
+  return allianceTagKey(left) === allianceTagKey(right);
+}
+
+/** Tags to try against the Kingshot API, current name first, then the old one. */
+export function allianceTagLookupCandidates(tag: string): string[] {
+  const trimmed = tag.trim();
+  if (!trimmed) return [];
+
+  const canonical = canonicalAllianceTag(trimmed);
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+
+  for (const candidate of [canonical, trimmed]) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    candidates.push(candidate);
+  }
+
+  for (const [oldTag, currentTag] of Object.entries(ALLIANCE_TAG_RENAMES)) {
+    if (currentTag.toUpperCase() !== canonical.toUpperCase() || seen.has(oldTag)) continue;
+    seen.add(oldTag);
+    candidates.push(oldTag);
+  }
+
+  return candidates;
+}
+
 /** The single internal player shape. Both the API and CSV importers produce this. */
 export interface Player {
   id: string;
@@ -185,6 +234,8 @@ export interface CsvColumnMapping {
   power: string | null;
   rank: string | null;
   id: string | null;
+  hq: string | null;
+  kills: string | null;
 }
 
 export interface CsvParseResult {

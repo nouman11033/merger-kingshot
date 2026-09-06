@@ -17,7 +17,7 @@ import type {
   NormalizedMember,
   NormalizedRoster,
 } from "@/types/roster";
-import { HOME_KINGDOM_ID, TOP_ALLIANCE_LIMIT } from "@/types/roster";
+import { allianceTagLookupCandidates, HOME_KINGDOM_ID, TOP_ALLIANCE_LIMIT } from "@/types/roster";
 
 /**
  * Server-only client for the Kingshot Stats API.
@@ -709,41 +709,21 @@ async function applyKingdomKillScores(members: NormalizedMember[], kingdomId: st
   }
 }
 
-/**
- * Fetches and normalizes one alliance roster. Server-side only.
- *
- * Throws KingshotApiError for invalid kingdom/tag, unauthorized keys, rate
- * limits, upstream outages, malformed payloads and empty rosters.
- */
-export async function getAllianceRoster(
-  kingdomId: string,
-  allianceTag: string,
-  options: RosterFetchOptions = {},
+async function fetchAllianceRosterForTag(
+  kingdom: string,
+  tag: string,
+  options: RosterFetchOptions,
+  cacheAliases: string[] = [],
 ): Promise<NormalizedRoster> {
-  const kingdom = kingdomId.trim();
-  const tag = allianceTag.trim();
-
-  if (!kingdom) {
-    throw new KingshotApiError("Kingdom ID is required.", { status: 400, code: "missing_kingdom" });
-  }
-  if (!/^\d+$/.test(kingdom)) {
-    throw new KingshotApiError(
-      `"${kingdom}" is not a valid kingdom ID. Kingdom IDs are numeric, for example 1234.`,
-      { status: 400, code: "missing_kingdom" },
-    );
-  }
-  if (!tag) {
-    throw new KingshotApiError("Alliance tag is required.", { status: 400, code: "missing_tag" });
-  }
-
   const key = cacheKey(kingdom, tag);
 
   if (!options.force) {
-    const cached = rosterCache.get(key);
-    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-      return { ...cached.roster, fromCache: true };
+    for (const alias of [tag, ...cacheAliases]) {
+      const cached = rosterCache.get(cacheKey(kingdom, alias));
+      if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+        return { ...cached.roster, fromCache: true };
+      }
     }
-    // Coalesce concurrent requests for the same alliance, as the API itself does.
     const pending = inFlight.get(key);
     if (pending) return pending;
   }
@@ -772,7 +752,14 @@ export async function getAllianceRoster(
 
     await applyKingdomKillScores(roster.members, kingdom);
 
-    rosterCache.set(key, { roster, fetchedAt: Date.now() });
+    const fetchedAt = Date.now();
+    rosterCache.set(key, { roster, fetchedAt });
+    for (const alias of cacheAliases) {
+      rosterCache.set(cacheKey(kingdom, alias), { roster, fetchedAt });
+    }
+    if (roster.info.tag && roster.info.tag !== tag) {
+      rosterCache.set(cacheKey(kingdom, roster.info.tag), { roster, fetchedAt });
+    }
     return roster;
   })();
 
@@ -784,6 +771,60 @@ export async function getAllianceRoster(
   }
 }
 
+/**
+ * Fetches and normalizes one alliance roster. Server-side only.
+ *
+ * Throws KingshotApiError for invalid kingdom/tag, unauthorized keys, rate
+ * limits, upstream outages, malformed payloads and empty rosters.
+ *
+ * Known kingdom 2362 renames are resolved first (`RCB` → `SUN`). If the current
+ * tag is missing, the previous tag is tried so existing sessions keep working.
+ */
+export async function getAllianceRoster(
+  kingdomId: string,
+  allianceTag: string,
+  options: RosterFetchOptions = {},
+): Promise<NormalizedRoster> {
+  const kingdom = kingdomId.trim();
+  const requested = allianceTag.trim();
+
+  if (!kingdom) {
+    throw new KingshotApiError("Kingdom ID is required.", { status: 400, code: "missing_kingdom" });
+  }
+  if (!/^\d+$/.test(kingdom)) {
+    throw new KingshotApiError(
+      `"${kingdom}" is not a valid kingdom ID. Kingdom IDs are numeric, for example 1234.`,
+      { status: 400, code: "missing_kingdom" },
+    );
+  }
+  if (!requested) {
+    throw new KingshotApiError("Alliance tag is required.", { status: 400, code: "missing_tag" });
+  }
+
+  const candidates = allianceTagLookupCandidates(requested);
+  let lastMissing: KingshotApiError | null = null;
+
+  for (const tag of candidates) {
+    try {
+      return await fetchAllianceRosterForTag(kingdom, tag, options, candidates);
+    } catch (error) {
+      if (error instanceof KingshotApiError && error.code === "alliance_not_found" && candidates.length > 1) {
+        lastMissing = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw (
+    lastMissing ??
+    new KingshotApiError(`Alliance not found for [${requested}] in kingdom ${kingdom}.`, {
+      status: 404,
+      code: "alliance_not_found",
+    })
+  );
+}
+
 /** Drops cached rosters (used before a forced sync of a whole session). */
 export function invalidateRosterCache(entries?: { kingdomId: string; allianceTag: string }[]): void {
   if (!entries) {
@@ -791,7 +832,9 @@ export function invalidateRosterCache(entries?: { kingdomId: string; allianceTag
     return;
   }
   for (const entry of entries) {
-    rosterCache.delete(cacheKey(entry.kingdomId.trim(), entry.allianceTag.trim()));
+    for (const tag of allianceTagLookupCandidates(entry.allianceTag)) {
+      rosterCache.delete(cacheKey(entry.kingdomId.trim(), tag));
+    }
   }
 }
 
@@ -954,14 +997,15 @@ export async function getKingdomAllianceRanks(
  * be verified without ever echoing the API key or full player data.
  */
 export async function inspectAllianceResponse(kingdomId: string, allianceTag: string) {
+  const tag = allianceTagLookupCandidates(allianceTag)[0] ?? allianceTag.trim();
   const payload = await requestJson(
-    `/alliances/${encodeURIComponent(kingdomId.trim())}/${encodeURIComponent(allianceTag.trim())}`,
+    `/alliances/${encodeURIComponent(kingdomId.trim())}/${encodeURIComponent(tag)}`,
     { include: "info,roster" },
   );
 
   const memberArray = findMemberArray(payload);
   const allianceRecord = findAllianceRecord(payload);
-  const normalized = normalizeRoster(payload, kingdomId.trim(), allianceTag.trim());
+  const normalized = normalizeRoster(payload, kingdomId.trim(), tag);
 
   return {
     topLevelKeys: isRecord(payload) ? Object.keys(payload) : [],
