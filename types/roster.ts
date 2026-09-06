@@ -16,6 +16,13 @@ export const ALLIANCE_TAG_RENAMES: Record<string, string> = {
   RCB: "SUN",
 };
 
+export const RENAMED_RCB_TAG = "SUN";
+export const RENAMED_RCB_NAME = "SuperUnitedNexus";
+
+export const ALLIANCE_NAME_OVERRIDES: Record<string, string> = {
+  SUN: RENAMED_RCB_NAME,
+};
+
 export const EXAMPLE_ALLIANCE_TAGS = ["SUN", "HEA", "TOP"] as const;
 
 /** Current Kingshot tag for a stored or typed value (`RCB` → `SUN`). */
@@ -31,6 +38,29 @@ export function allianceTagKey(tag: string): string {
 
 export function allianceTagsMatch(left: string, right: string): boolean {
   return allianceTagKey(left) === allianceTagKey(right);
+}
+
+/** Tag plus full name after the RCB → SUN SuperUnitedNexus rename. */
+export function applyKnownAllianceIdentity(
+  tag: string,
+  name?: string | null,
+): { tag: string; name: string } {
+  const givenName = name?.trim() ?? "";
+  const isRenamedRcb =
+    allianceTagsMatch(tag, "RCB") ||
+    allianceTagsMatch(tag, "SUN") ||
+    /^super\s*united\s*nexus$/i.test(givenName);
+
+  if (isRenamedRcb) {
+    return { tag: RENAMED_RCB_TAG, name: RENAMED_RCB_NAME };
+  }
+
+  const resolvedTag = canonicalAllianceTag(tag);
+  return { tag: resolvedTag, name: givenName || resolvedTag };
+}
+
+export function canonicalAllianceName(tag: string, fallback?: string | null): string {
+  return applyKnownAllianceIdentity(tag, fallback).name;
 }
 
 /** Tags to try against the Kingshot API, current name first, then the old one. */

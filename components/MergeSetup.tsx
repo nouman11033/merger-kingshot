@@ -10,6 +10,7 @@ import { Alert, Badge, Button, Card, Field, Input, SLOT_THEME, SectionTitle, Spi
 import { formatPower, formatRelativeTime } from "@/lib/roster";
 import {
   allianceTagsMatch,
+  applyKnownAllianceIdentity,
   EXAMPLE_ALLIANCE_TAGS,
   HOME_KINGDOM_ID,
   type AllianceSlot,
@@ -326,6 +327,7 @@ export function MergeSetup({
               {selectedTags.map((tag, index) => {
                 const theme = SLOT_THEME[(index + 1) as AllianceSlot];
                 const row = ranking.find((alliance) => allianceTagsMatch(alliance.tag, tag));
+                const identity = applyKnownAllianceIdentity(tag, row?.name);
                 return (
                   <span
                     key={tag}
@@ -336,7 +338,7 @@ export function MergeSetup({
                       theme.text,
                     )}
                   >
-                    {theme.label}: [{tag}] {row?.name ?? tag}
+                    {theme.label}: [{identity.tag}] {identity.name}
                   </span>
                 );
               })}
@@ -350,7 +352,8 @@ export function MergeSetup({
           ) : (
             <ol className="divide-y divide-border">
               {ranking.map((alliance) => {
-                const selectedIndex = selectedTags.indexOf(alliance.tag);
+                const identity = applyKnownAllianceIdentity(alliance.tag, alliance.name);
+                const selectedIndex = selectedTags.findIndex((tag) => allianceTagsMatch(tag, alliance.tag));
                 const selected = selectedIndex >= 0;
                 const slot = selected ? ((selectedIndex + 1) as AllianceSlot) : null;
                 const theme = slot ? SLOT_THEME[slot] : null;
@@ -389,7 +392,7 @@ export function MergeSetup({
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold text-foreground">
-                          [{alliance.tag}] {alliance.name}
+                          [{identity.tag}] {identity.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
                           {alliance.leaderName ? `Leader ${alliance.leaderName}` : "Kingdom 2362"}
@@ -546,7 +549,8 @@ export function MergeSetup({
                         </Badge>
                       </div>
                       <p className="mt-1 truncate text-sm font-semibold text-foreground">
-                        [{preview.allianceTag}] {preview.allianceName}
+                        [{applyKnownAllianceIdentity(preview.allianceTag, preview.allianceName).tag}]{" "}
+                        {applyKnownAllianceIdentity(preview.allianceTag, preview.allianceName).name}
                       </p>
                       <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
                         <dt className="text-muted-foreground">Kingdom</dt>

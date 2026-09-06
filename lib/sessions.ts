@@ -26,7 +26,7 @@ import type {
   NormalizedRoster,
   SyncReport,
 } from "@/types/roster";
-import { canonicalAllianceTag, PRIME_LIMIT } from "@/types/roster";
+import { applyKnownAllianceIdentity, canonicalAllianceTag, PRIME_LIMIT } from "@/types/roster";
 
 /** Server-side persistence for merge sessions, rosters and selections. */
 
@@ -113,12 +113,18 @@ export async function listSessions(): Promise<MergeSessionSummary[]> {
       alliances: (alliancesResult.data ?? [])
         .filter((alliance) => alliance.merge_session_id === row.id)
         .sort((a, b) => (a.slot_number as number) - (b.slot_number as number))
-        .map((alliance) => ({
-          slotNumber: alliance.slot_number as AllianceSlot,
-          allianceTag: alliance.alliance_tag as string,
-          kingdomId: alliance.kingdom_id as string,
-          allianceName: (alliance.alliance_name as string) || (alliance.alliance_tag as string),
-        })),
+        .map((alliance) => {
+          const identity = applyKnownAllianceIdentity(
+            alliance.alliance_tag as string,
+            (alliance.alliance_name as string) || null,
+          );
+          return {
+            slotNumber: alliance.slot_number as AllianceSlot,
+            allianceTag: identity.tag,
+            kingdomId: alliance.kingdom_id as string,
+            allianceName: identity.name,
+          };
+        }),
       playerCount: (playersResult.data ?? []).filter((player) => player.merge_session_id === row.id).length,
       selectedCount: (selectionsResult.data ?? []).filter(
         (selection) =>
@@ -197,7 +203,7 @@ export async function createSession(input: {
       slot_number: alliance.slotNumber,
       kingdom_id: alliance.kingdomId,
       alliance_tag: alliance.allianceTag,
-      alliance_name: alliance.allianceTag,
+      alliance_name: applyKnownAllianceIdentity(alliance.allianceTag).name,
       source,
     })),
   );
@@ -318,11 +324,15 @@ async function updateAllianceMeta(
   source: "api" | "csv",
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
+  const identity = applyKnownAllianceIdentity(
+    roster?.info.tag || alliance.alliance_tag,
+    roster?.info.name || alliance.alliance_name,
+  );
   const { error } = await supabase
     .from(ALLIANCES_TABLE)
     .update({
-      alliance_tag: roster?.info.tag || alliance.alliance_tag,
-      alliance_name: roster?.info.name || alliance.alliance_name || alliance.alliance_tag,
+      alliance_tag: identity.tag,
+      alliance_name: identity.name,
       external_alliance_id: roster?.info.externalAllianceId ?? alliance.external_alliance_id,
       power: roster?.info.power ?? null,
       member_count: roster?.info.memberCount ?? memberCount,
@@ -451,8 +461,12 @@ export async function importCsvRoster(
   if (!alliance) throw new AppError(`Alliance slot ${payload.slotNumber} is not configured.`, 404);
 
   const kingdomId = payload.kingdomId?.trim() || alliance.kingdom_id;
-  const allianceTag = canonicalAllianceTag(payload.allianceTag?.trim() || alliance.alliance_tag);
-  const allianceName = payload.allianceName?.trim() || allianceTag;
+  const identity = applyKnownAllianceIdentity(
+    payload.allianceTag?.trim() || alliance.alliance_tag,
+    payload.allianceName,
+  );
+  const allianceTag = identity.tag;
+  const allianceName = identity.name;
 
   const { error: metaError } = await supabase
     .from(ALLIANCES_TABLE)

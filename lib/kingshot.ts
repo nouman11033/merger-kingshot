@@ -17,7 +17,12 @@ import type {
   NormalizedMember,
   NormalizedRoster,
 } from "@/types/roster";
-import { allianceTagLookupCandidates, HOME_KINGDOM_ID, TOP_ALLIANCE_LIMIT } from "@/types/roster";
+import {
+  allianceTagLookupCandidates,
+  applyKnownAllianceIdentity,
+  HOME_KINGDOM_ID,
+  TOP_ALLIANCE_LIMIT,
+} from "@/types/roster";
 
 /**
  * Server-only client for the Kingshot Stats API.
@@ -519,10 +524,13 @@ function normalizeAllianceInfo(
   allianceTag: string,
 ): NormalizedAllianceInfo {
   const record = findAllianceRecord(payload) ?? {};
+  const rawTag = toStringOrNull(pick(record, ["abbr", "tag", "alliance_tag"])) ?? allianceTag;
+  const rawName = toStringOrNull(pick(record, ["name", "alliance_name"])) ?? rawTag;
+  const identity = applyKnownAllianceIdentity(rawTag, rawName);
   return {
     externalAllianceId: toStringOrNull(pick(record, ["aid", "alliance_id", "id"])),
-    name: toStringOrNull(pick(record, ["name", "alliance_name"])) ?? allianceTag,
-    tag: toStringOrNull(pick(record, ["abbr", "tag", "alliance_tag"])) ?? allianceTag,
+    name: identity.name,
+    tag: identity.tag,
     kingdomId: toStringOrNull(pick(record, ["kid", "kingdom_id"])) ?? kingdomId,
     power: toNumber(pick(record, ["power", "alliance_power", "total_power"])),
     memberCount: toPositiveInt(pick(record, ["count", "member_count", "members_count"])),
@@ -777,8 +785,8 @@ async function fetchAllianceRosterForTag(
  * Throws KingshotApiError for invalid kingdom/tag, unauthorized keys, rate
  * limits, upstream outages, malformed payloads and empty rosters.
  *
- * Known kingdom 2362 renames are resolved first (`RCB` → `SUN`). If the current
- * tag is missing, the previous tag is tried so existing sessions keep working.
+ * Known kingdom 2362 renames are resolved first (`RCB` → `SUN` SuperUnitedNexus).
+ * If the current tag is missing, the previous tag is tried so existing sessions keep working.
  */
 export async function getAllianceRoster(
   kingdomId: string,
@@ -885,10 +893,11 @@ function normalizeAllianceRank(raw: unknown, fallbackKingdomId: string, index: n
   const kingdomId =
     toStringOrNull(pick(raw, ["kid", "kingdom_id", "kingdom"])) ?? fallbackKingdomId;
 
+  const identity = applyKnownAllianceIdentity(tag, name);
   return {
     rank,
-    tag,
-    name: name ?? tag,
+    tag: identity.tag,
+    name: identity.name,
     power,
     memberCount: toNonNegativeInt(pick(raw, ["member_count", "count", "members"])),
     leaderName: toStringOrNull(pick(raw, ["leader_name", "leader"])),

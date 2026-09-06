@@ -7,6 +7,7 @@ import type {
   Player,
   RosterSource,
 } from "@/types/roster";
+import { applyKnownAllianceIdentity } from "@/types/roster";
 
 /**
  * Row -> internal model mapping. Isomorphic on purpose: the server uses it for
@@ -49,13 +50,14 @@ export function mapSession(row: MergeSessionRow): MergeSession {
 }
 
 export function mapAlliance(row: AllianceRow): Alliance {
+  const identity = applyKnownAllianceIdentity(row.alliance_tag, row.alliance_name);
   return {
     id: row.id,
     mergeSessionId: row.merge_session_id,
     slotNumber: toSlot(row.slot_number),
     kingdomId: row.kingdom_id,
-    allianceTag: row.alliance_tag,
-    allianceName: row.alliance_name || row.alliance_tag,
+    allianceTag: identity.tag,
+    allianceName: identity.name,
     source: (row.source === "csv" ? "csv" : "api") as RosterSource,
     externalAllianceId: row.external_alliance_id,
     power: toNumeric(row.power),

@@ -11,7 +11,7 @@ import {
   formatRelativeTime,
   primeWouldRank,
 } from "@/lib/roster";
-import { HOME_KINGDOM_ID } from "@/types/roster";
+import { applyKnownAllianceIdentity, HOME_KINGDOM_ID } from "@/types/roster";
 import type { Alliance, KingdomAllianceRank } from "@/types/roster";
 
 interface KingdomLadderProps {
@@ -105,6 +105,7 @@ function KingdomLadderComponent({
         <ol className="divide-y divide-border">
           {above.map((row) => {
             const gap = gapLabel(row.power, primePower);
+            const identity = applyKnownAllianceIdentity(row.tag, row.name);
             return (
               <li
                 key={`${row.rank}-${row.tag}`}
@@ -113,7 +114,7 @@ function KingdomLadderComponent({
                 <span className="tabular text-sm font-black text-muted-foreground">#{row.rank}</span>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-foreground">
-                    [{row.tag}] {row.name}
+                    [{identity.tag}] {identity.name}
                   </p>
                   <p className={clsx("text-[11px] font-semibold", gap.className)}>{gap.text}</p>
                 </div>
