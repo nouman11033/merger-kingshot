@@ -63,7 +63,9 @@ export function canonicalAllianceName(tag: string, fallback?: string | null): st
   return applyKnownAllianceIdentity(tag, fallback).name;
 }
 
-/** Tags to try against the Kingshot API, current name first, then the old one. */
+/** Tags to try against the API. The requested tag is first so a still-live
+ * abbreviation is not stolen by a different alliance that reused the new tag
+ * (RCB SuperUnitedNexus vs SUN TheSun). */
 export function allianceTagLookupCandidates(tag: string): string[] {
   const trimmed = tag.trim();
   if (!trimmed) return [];
@@ -72,7 +74,7 @@ export function allianceTagLookupCandidates(tag: string): string[] {
   const candidates: string[] = [];
   const seen = new Set<string>();
 
-  for (const candidate of [canonical, trimmed]) {
+  for (const candidate of [trimmed, canonical]) {
     if (seen.has(candidate)) continue;
     seen.add(candidate);
     candidates.push(candidate);

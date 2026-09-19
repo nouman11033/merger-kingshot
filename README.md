@@ -27,8 +27,8 @@ edit the same session.
 
 | Variable | Where it runs | Purpose |
 | --- | --- | --- |
-| `KINGSHOT_API_KEY` | **Server only** | Kingshot Stats API key (`kss_…`). Create one at <https://api.kingshotstats.com> by signing in with Discord. |
-| `KINGSHOT_API_BASE_URL` | Server only | Optional override. Defaults to `https://api.kingshotstats.com/v1`. |
+| `KINGSHOT_API_KEY` | **Server only** | MightPulse API key (`kss_…`). Create one at <https://api.mightpulse.com> by signing in with Discord. |
+| `KINGSHOT_API_BASE_URL` | Server only | Optional override. Defaults to `https://api.mightpulse.com/v1`. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser + server | Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser + server | Anon key. Used for Realtime and for writing selections. |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Server only** | Writes rosters and clears Prime. Never expose it. |

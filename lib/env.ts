@@ -24,7 +24,7 @@ export function getKingshotApiKey(): string {
 }
 
 export function getKingshotApiBaseUrl(): string {
-  return (readServerEnv("KINGSHOT_API_BASE_URL") || "https://api.kingshotstats.com/v1").replace(
+  return (readServerEnv("KINGSHOT_API_BASE_URL") || "https://api.mightpulse.com/v1").replace(
     /\/+$/,
     "",
   );

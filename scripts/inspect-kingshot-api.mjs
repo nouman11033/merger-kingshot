@@ -11,7 +11,7 @@
 
 const [kingdomId, allianceTag] = process.argv.slice(2);
 const apiKey = process.env.KINGSHOT_API_KEY?.trim();
-const baseUrl = (process.env.KINGSHOT_API_BASE_URL?.trim() || "https://api.kingshotstats.com/v1").replace(
+const baseUrl = (process.env.KINGSHOT_API_BASE_URL?.trim() || "https://api.mightpulse.com/v1").replace(
   /\/+$/,
   "",
 );

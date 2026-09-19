@@ -28,7 +28,7 @@ import {
 /**
  * Server-only client for the Kingshot Stats API.
  *
- * Documented contract (https://api.kingshotstats.com):
+ * Documented contract (https://api.mightpulse.com):
  *   GET /v1/alliances/{kid}/{tag}?include=info,roster
  *   Auth: `Authorization: Bearer kss_…` or `X-Api-Key`
  *   Alliance: aid, name, abbr, kid, power, count, leader_name, leader_uid,
@@ -782,8 +782,8 @@ async function fetchAllianceRosterForTag(
  * Throws KingshotApiError for invalid kingdom/tag, unauthorized keys, rate
  * limits, upstream outages, malformed payloads and empty rosters.
  *
- * Known kingdom 2362 renames are resolved first (`RCB` → `SUN` SuperUnitedNexus).
- * If the current tag is missing, the previous tag is tried so existing sessions keep working.
+ * Known kingdom 2362 renames fall back to the previous tag if the requested
+ * one is missing, so existing sessions keep working.
  */
 export async function getAllianceRoster(
   kingdomId: string,
