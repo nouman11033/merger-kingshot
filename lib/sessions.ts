@@ -38,8 +38,12 @@ export class AppError extends Error {
   }
 }
 
-function fail(context: string, error: { message: string } | null): never {
-  throw new AppError(`${context}: ${error?.message ?? "unknown database error"}`, 500);
+function fail(
+  context: string,
+  error: { message: string; code?: string; details?: string; hint?: string } | null,
+): never {
+  const parts = [error?.message, error?.code, error?.details, error?.hint].filter(Boolean);
+  throw new AppError(`${context}: ${parts.join(" — ") || "unknown database error"}`, 500);
 }
 
 export function validateAllianceInputs(mergeSize: MergeSize, inputs: AllianceInput[]): AllianceInput[] {

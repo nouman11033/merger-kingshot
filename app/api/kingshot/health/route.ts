@@ -1,7 +1,7 @@
 import { kingshotEnvStatus } from "@/lib/env";
 import { errorResponse } from "@/lib/http";
 import { inspectAllianceResponse } from "@/lib/kingshot";
-import { isSupabaseConfigured, hasServiceRoleKey } from "@/lib/supabase-admin";
+import { isSupabaseConfigured, hasServiceRoleKey, pingSupabase } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,11 +21,14 @@ export async function GET(request: Request) {
   const tag = url.searchParams.get("tag") ?? url.searchParams.get("allianceTag");
 
   const kingshot = kingshotEnvStatus();
+  const supabasePing = await pingSupabase();
   const config = {
     kingshotApiKey: kingshot.kingshotApiKey,
     usedPublicKeyFallback: kingshot.usedPublicKeyFallback,
     supabase: isSupabaseConfigured(),
     supabaseServiceRole: hasServiceRoleKey(),
+    supabaseReachable: supabasePing.ok,
+    supabaseError: supabasePing.error,
     kingshotBaseUrl: kingshot.kingshotBaseUrl,
   };
 
