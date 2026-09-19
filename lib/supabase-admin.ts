@@ -54,14 +54,30 @@ function describeNetworkFailure(error: unknown): string {
   return error.message;
 }
 
+export function sanitizeSupabaseError(message: string): string {
+  if (/521|Web server is down|cf-error|<!DOCTYPE html/i.test(message)) {
+    return "Supabase project is unreachable (Cloudflare 521). It is likely paused — open the Supabase dashboard and Restore the project.";
+  }
+  const trimmed = message.replace(/\s+/g, " ").trim();
+  return trimmed.length > 240 ? `${trimmed.slice(0, 240)}…` : trimmed;
+}
+
 const supabaseFetch: typeof fetch = async (input, init) => {
+  let response: Response;
   try {
-    return await fetch(input, { ...init, cache: "no-store" });
+    response = await fetch(input, { ...init, cache: "no-store" });
   } catch (error) {
     throw new Error(
-      `Could not reach Supabase at ${getSupabaseUrl() || "(missing URL)"}: ${describeNetworkFailure(error)}. Confirm the project is not paused and NEXT_PUBLIC_SUPABASE_URL is the API Project URL.`,
+      `Could not reach Supabase: ${sanitizeSupabaseError(describeNetworkFailure(error))}. Confirm NEXT_PUBLIC_SUPABASE_URL is the API Project URL and the project is not paused.`,
     );
   }
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("text/html") || response.status === 521) {
+    throw new Error(
+      "Supabase project is unreachable (Cloudflare 521). It is likely paused — open the Supabase dashboard and Restore the project.",
+    );
+  }
+  return response;
 };
 
 export function getSupabaseAdmin(): SupabaseClient {
@@ -106,9 +122,9 @@ export async function pingSupabase(): Promise<{ ok: boolean; error: string | nul
   }
   try {
     const { error } = await getSupabaseAdmin().from("merge_sessions").select("id").limit(1);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: sanitizeSupabaseError(error.message) };
     return { ok: true, error: null };
   } catch (error) {
-    return { ok: false, error: describeNetworkFailure(error) };
+    return { ok: false, error: sanitizeSupabaseError(describeNetworkFailure(error)) };
   }
 }

@@ -2,7 +2,7 @@ import "server-only";
 
 import { getAllianceRoster, getKingdomAllianceRanks, invalidateRosterCache, KingshotApiError } from "@/lib/kingshot";
 import { mapAlliance, mapPlayer, mapSession } from "@/lib/mappers";
-import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin, sanitizeSupabaseError } from "@/lib/supabase-admin";
 import {
   ALLIANCES_TABLE,
   PLAYERS_TABLE,
@@ -42,7 +42,9 @@ function fail(
   context: string,
   error: { message: string; code?: string; details?: string; hint?: string } | null,
 ): never {
-  const parts = [error?.message, error?.code, error?.details, error?.hint].filter(Boolean);
+  const parts = [error?.message, error?.code, error?.details, error?.hint]
+    .filter((part): part is string => Boolean(part))
+    .map(sanitizeSupabaseError);
   throw new AppError(`${context}: ${parts.join(" — ") || "unknown database error"}`, 500);
 }
 
