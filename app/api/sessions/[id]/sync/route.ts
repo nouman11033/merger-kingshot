@@ -1,6 +1,7 @@
 import { errorResponse } from "@/lib/http";
 import { AppError, getSnapshot, syncSession } from "@/lib/sessions";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** SYNC ROSTERS — refetches the Kingshot API and upserts every alliance. */

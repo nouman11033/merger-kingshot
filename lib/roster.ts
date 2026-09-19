@@ -66,7 +66,7 @@ export function officerPlayers(players: Player[], allianceId?: string): Player[]
 /**
  * Kingdom alliances ranked strictly above the strongest alliance in this merge.
  * Falls back to every ranked alliance that is not ours when our tags are missing
- * from the board (CSV sessions, or a tag outside the fetched top 10).
+ * from the board (for example a tag outside the fetched top 10).
  */
 export function alliancesRankedAbove(
   ranking: KingdomAllianceRank[],

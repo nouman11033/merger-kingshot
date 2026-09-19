@@ -5,7 +5,6 @@ import type {
   MergeSession,
   MergeSize,
   Player,
-  RosterSource,
 } from "@/types/roster";
 import { applyKnownAllianceIdentity } from "@/types/roster";
 
@@ -58,7 +57,7 @@ export function mapAlliance(row: AllianceRow): Alliance {
     kingdomId: row.kingdom_id,
     allianceTag: identity.tag,
     allianceName: identity.name,
-    source: (row.source === "csv" ? "csv" : "api") as RosterSource,
+    source: "api",
     externalAllianceId: row.external_alliance_id,
     power: toNumeric(row.power),
     memberCount: row.member_count,

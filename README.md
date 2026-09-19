@@ -6,8 +6,7 @@ and everyone watching the same link sees the shared **PRIME** roster update
 instantly. Prime is capped at 100 players and always ordered by Power descending.
 
 Built with Next.js (App Router), TypeScript, Tailwind CSS, and Supabase
-(PostgreSQL + Realtime). Rosters come from the Kingshot Stats API, with CSV import
-as a fallback.
+(PostgreSQL + Realtime). Rosters come from the Kingshot Stats API.
 
 ---
 
@@ -35,9 +34,12 @@ edit the same session.
 | `SUPABASE_SERVICE_ROLE_KEY` | **Server only** | Writes rosters and clears Prime. Never expose it. |
 
 The Kingshot key and the service-role key are read only inside server code
-(`lib/kingshot.ts` is marked `server-only`) and are never sent to the browser. The
-app still runs without a Kingshot key — roster fetching is disabled and the UI
-points you at CSV import instead.
+(`lib/kingshot.ts` is marked `server-only`) and are never sent to the browser.
+
+On Vercel, set these in Project Settings → Environment Variables for
+**Production, Preview, and Development**, then redeploy. The name must be
+`KINGSHOT_API_KEY` — do not prefix it with `NEXT_PUBLIC_`. Serverless functions
+read the key at request time, so a rebuild is still required after you add it.
 
 ### Database setup
 
@@ -55,7 +57,7 @@ the Realtime publication.
 | Table | Holds |
 | --- | --- |
 | `merge_sessions` | One planning session: name, 2 or 3 alliances, Prime limit (100). |
-| `alliances` | One row per slot: kingdom ID, tag, name, source (`api` or `csv`), sync timestamps. |
+| `alliances` | One row per slot: kingdom ID, tag, name, source, sync timestamps. |
 | `players` | Roster members: stable external ID, name, power, alliance rank, `active` flag. |
 | `merge_player_selections` | Which players are in Prime, per session. |
 
@@ -63,9 +65,9 @@ Two derived values are deliberately **not** stored: the Prime roster and its
 statistics. Both are computed from players + selections on every render, so they
 can never drift out of sync with the underlying data.
 
-Players are identified by a namespaced external ID (`uid:12345` from the API,
-`csv:…` from a file) rather than by name, so renames do not create duplicates or
-lose a player's Prime slot.
+Players are identified by a namespaced external ID (`uid:12345` from the API)
+rather than by name, so renames do not create duplicates or lose a player's
+Prime slot.
 
 ### Sorting rules
 
@@ -115,15 +117,6 @@ refreshing.
 The database is the final authority: the 100-player cap is enforced by a trigger,
 so even a race between two browsers cannot produce a 101st Prime member.
 
-### CSV import
-
-Use it when the API has no data for an alliance, or when you have no key. The
-importer auto-detects Name, Power, Rank, and ID columns from common header
-spellings, parses shorthand power values such as `31.4M` or `28,100,000`, shows a
-preview before committing, and reports skipped rows. Imported players use the same
-internal model as API players, so every feature behaves identically. Re-importing
-a slot replaces that roster instead of duplicating it.
-
 ---
 
 ## Security
@@ -164,10 +157,9 @@ a slot replaces that roster instead of duplicating it.
 | --- | --- | --- |
 | `/api/kingshot/roster` | POST | Preview one or more alliance rosters. `force: true` bypasses the server cache. |
 | `/api/kingshot/health` | GET | Configuration and response-shape diagnostics. |
-| `/api/sessions` | GET, POST | List sessions; create a session (fetching rosters when `source: "api"`). |
+| `/api/sessions` | GET, POST | List sessions; create a session and fetch rosters from the Kingshot API. |
 | `/api/sessions/[id]` | GET | Full session snapshot: session, alliances, players, selections. |
-| `/api/sessions/[id]/sync` | POST | Re-fetch every API-backed alliance. |
-| `/api/sessions/[id]/import` | POST | Import parsed CSV rosters into one or more slots. |
+| `/api/sessions/[id]/sync` | POST | Re-fetch every alliance from the Kingshot API. |
 | `/api/sessions/[id]/clear` | POST | Clear every Prime selection in the session. |
 
 Errors carry a machine-readable `code` (`unauthorized`, `alliance_not_found`,
@@ -181,7 +173,7 @@ app/            routes, API handlers, layout, global styles
 components/     UI: setup, planner, rosters, filters, export, toasts
 hooks/          useMergeRealtime — subscription, batching, reconnection
 lib/            Kingshot client, Supabase clients, session data access,
-                roster derivation, CSV parsing, coercion helpers
+                roster derivation, coercion helpers
 types/          shared domain and database row types
 supabase/       SQL migration
 scripts/        API inspection helper
@@ -189,9 +181,19 @@ scripts/        API inspection helper
 
 ## Deploying
 
-Any Node host works; Vercel needs no extra configuration. Set the five
-environment variables in the hosting dashboard (only the two `NEXT_PUBLIC_` ones
-are exposed to browsers), run the migration against your Supabase project, and
-confirm Realtime is enabled for the `public` schema. Note that the 60-second
-roster cache is per server instance, so a scaled-out deployment may fetch once
-per instance.
+Any Node host works. Set the five environment variables in the hosting dashboard
+(only the two `NEXT_PUBLIC_` ones are exposed to browsers), run the migration
+against your Supabase project, and confirm Realtime is enabled for the `public`
+schema.
+
+For Vercel:
+
+1. Add `KINGSHOT_API_KEY` (not `NEXT_PUBLIC_KINGSHOT_API_KEY`) under Project
+   Settings → Environment Variables.
+2. Enable it for Production, Preview, and Development.
+3. Redeploy after saving. Serverless functions read the key at request time; the
+   home page also probes `/api/kingshot/health` so a missed build-time value can
+   recover at runtime.
+
+Note that the 60-second roster cache is per server instance, so a scaled-out
+deployment may fetch once per instance.

@@ -2,6 +2,7 @@ import { errorResponse } from "@/lib/http";
 import { getKingdomAllianceRanks } from "@/lib/kingshot";
 import { HOME_KINGDOM_ID, TOP_ALLIANCE_LIMIT } from "@/types/roster";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**

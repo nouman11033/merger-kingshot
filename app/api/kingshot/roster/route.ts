@@ -3,6 +3,7 @@ import { getAllianceRoster } from "@/lib/kingshot";
 import { AppError } from "@/lib/sessions";
 import type { AllianceInput } from "@/types/roster";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface RosterRequest {

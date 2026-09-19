@@ -1,7 +1,9 @@
+import { kingshotEnvStatus } from "@/lib/env";
 import { errorResponse } from "@/lib/http";
-import { inspectAllianceResponse, isKingshotApiConfigured } from "@/lib/kingshot";
+import { inspectAllianceResponse } from "@/lib/kingshot";
 import { isSupabaseConfigured, hasServiceRoleKey } from "@/lib/supabase-admin";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
@@ -18,11 +20,13 @@ export async function GET(request: Request) {
   const kingdomId = url.searchParams.get("kingdomId") ?? url.searchParams.get("kid");
   const tag = url.searchParams.get("tag") ?? url.searchParams.get("allianceTag");
 
+  const kingshot = kingshotEnvStatus();
   const config = {
-    kingshotApiKey: isKingshotApiConfigured(),
+    kingshotApiKey: kingshot.kingshotApiKey,
+    usedPublicKeyFallback: kingshot.usedPublicKeyFallback,
     supabase: isSupabaseConfigured(),
     supabaseServiceRole: hasServiceRoleKey(),
-    kingshotBaseUrl: process.env.KINGSHOT_API_BASE_URL?.trim() || "https://api.kingshotstats.com/v1",
+    kingshotBaseUrl: kingshot.kingshotBaseUrl,
   };
 
   if (!kingdomId || !tag) {

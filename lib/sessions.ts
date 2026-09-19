@@ -17,7 +17,6 @@ import type {
   Alliance,
   AllianceInput,
   AllianceSlot,
-  CsvImportPayload,
   MergeSession,
   MergeSessionSummary,
   MergeSize,
@@ -177,10 +176,8 @@ export async function createSession(input: {
   name?: string;
   mergeSize: MergeSize;
   alliances: AllianceInput[];
-  source?: "api" | "csv";
 }): Promise<{ session: MergeSession; reports: SyncReport[] }> {
   const supabase = getSupabaseAdmin();
-  const source = input.source ?? "api";
   const alliances = validateAllianceInputs(input.mergeSize, input.alliances);
 
   const fallbackName = `Kingdom ${alliances[0].kingdomId} Merge (${alliances
@@ -204,16 +201,12 @@ export async function createSession(input: {
       kingdom_id: alliance.kingdomId,
       alliance_tag: alliance.allianceTag,
       alliance_name: applyKnownAllianceIdentity(alliance.allianceTag).name,
-      source,
+      source: "api",
     })),
   );
   if (allianceError) {
     await supabase.from(SESSIONS_TABLE).delete().eq("id", session.id);
     fail("Could not create the alliance slots", allianceError);
-  }
-
-  if (source === "csv") {
-    return { session, reports: [] };
   }
 
   try {
@@ -321,7 +314,7 @@ async function updateAllianceMeta(
   alliance: AllianceRow,
   roster: NormalizedRoster | null,
   memberCount: number,
-  source: "api" | "csv",
+  source: "api",
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
   const identity = applyKnownAllianceIdentity(
@@ -346,32 +339,24 @@ async function updateAllianceMeta(
   if (error) fail("Could not update alliance information", error);
 }
 
-/** SYNC ROSTERS: re-fetches every API-backed alliance in the session. */
+/** SYNC ROSTERS: re-fetches every alliance in the session from the Kingshot API. */
 export async function syncSession(sessionId: string): Promise<SyncReport[]> {
   const alliances = await loadAlliances(sessionId);
   if (alliances.length === 0) throw new AppError("This merge session has no alliances configured.", 404);
-
-  const apiAlliances = alliances.filter((alliance) => alliance.source !== "csv");
-  if (apiAlliances.length === 0) {
-    throw new AppError(
-      "Every alliance in this session was imported from CSV. Re-import the CSV files to refresh them.",
-      400,
-    );
-  }
 
   const reports: SyncReport[] = [];
 
   // A manual sync must get the freshest data the API allows, so the server-side
   // cache is dropped for these alliances first.
   invalidateRosterCache(
-    apiAlliances.map((alliance) => ({
+    alliances.map((alliance) => ({
       kingdomId: alliance.kingdom_id,
       allianceTag: alliance.alliance_tag,
     })),
   );
 
   // Sequential on purpose: the API allows 60 requests/minute and we stay polite.
-  for (const alliance of apiAlliances) {
+  for (const alliance of alliances) {
     const { roster, warnings } = await loadRosterForAlliance(alliance);
     const resolvedTag = roster.info.tag || canonicalAllianceTag(alliance.alliance_tag);
     const counts = await persistRoster(alliance, roster.members);
@@ -437,75 +422,6 @@ async function rewriteSessionNameTag(sessionId: string, fromTag: string, toTag: 
   const name = session.name.split(fromTag).join(toTag).slice(0, 120);
   const { error } = await supabase.from(SESSIONS_TABLE).update({ name }).eq("id", sessionId);
   if (error) fail("Could not update the merge session name", error);
-}
-
-/** CSV fallback: writes an uploaded roster into the same tables as the API path. */
-export async function importCsvRoster(
-  sessionId: string,
-  payload: CsvImportPayload,
-): Promise<SyncReport> {
-  const supabase = getSupabaseAdmin();
-
-  if (!payload.members?.length) throw new AppError("The CSV import contained no players.");
-
-  const session = await getSession(sessionId);
-  if (!session) throw new AppError("Merge session not found.", 404);
-  if (payload.slotNumber > session.mergeSize) {
-    throw new AppError(
-      `Alliance ${payload.slotNumber} does not exist in this ${session.mergeSize}-alliance merge.`,
-    );
-  }
-
-  const alliances = await loadAlliances(sessionId);
-  const alliance = alliances.find((row) => row.slot_number === payload.slotNumber);
-  if (!alliance) throw new AppError(`Alliance slot ${payload.slotNumber} is not configured.`, 404);
-
-  const kingdomId = payload.kingdomId?.trim() || alliance.kingdom_id;
-  const identity = applyKnownAllianceIdentity(
-    payload.allianceTag?.trim() || alliance.alliance_tag,
-    payload.allianceName,
-  );
-  const allianceTag = identity.tag;
-  const allianceName = identity.name;
-
-  const { error: metaError } = await supabase
-    .from(ALLIANCES_TABLE)
-    .update({
-      kingdom_id: kingdomId,
-      alliance_tag: allianceTag,
-      alliance_name: allianceName,
-      source: "csv",
-    })
-    .eq("id", alliance.id);
-  if (metaError) fail("Could not update the alliance", metaError);
-
-  // updateAllianceMeta below re-reads its name from this row, so it must carry
-  // the imported name — otherwise the name the user typed is written straight
-  // back to the old value.
-  const target: AllianceRow = {
-    ...alliance,
-    kingdom_id: kingdomId,
-    alliance_tag: allianceTag,
-    alliance_name: allianceName,
-    source: "csv",
-  };
-
-  const counts = await persistRoster(target, payload.members);
-  await updateAllianceMeta(target, null, payload.members.length, "csv");
-
-  return {
-    slotNumber: payload.slotNumber,
-    allianceTag,
-    kingdomId,
-    allianceName,
-    total: payload.members.length,
-    fresh: null,
-    cachedAt: null,
-    ageSeconds: null,
-    retrievedAt: new Date().toISOString(),
-    warnings: [],
-    ...counts,
-  };
 }
 
 /** Clears Prime for exactly one session. Other sessions are untouched. */

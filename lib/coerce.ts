@@ -1,4 +1,4 @@
-/** Shape-agnostic value readers. Shared by the API normalizer and CSV importer. */
+/** Shape-agnostic value readers used by the Kingshot API normalizer. */
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

@@ -1,3 +1,5 @@
+import { connection } from "next/server";
+
 import { MergeSetup } from "@/components/MergeSetup";
 import { ToastProvider } from "@/components/Toaster";
 import { Alert, Badge } from "@/components/ui";
@@ -5,6 +7,7 @@ import { getKingdomAllianceRanks, isKingshotApiConfigured, KingshotApiError } fr
 import { isSupabaseConfigured } from "@/lib/supabase-admin";
 import { HOME_KINGDOM_ID, TOP_ALLIANCE_LIMIT, type KingdomAllianceRank } from "@/types/roster";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function loadRanking(): Promise<{
@@ -43,6 +46,7 @@ async function loadRanking(): Promise<{
 }
 
 export default async function HomePage() {
+  await connection();
   const apiConfigured = isKingshotApiConfigured();
   const ranking = await loadRanking();
   const supabaseReady = isSupabaseConfigured();
@@ -57,19 +61,18 @@ export default async function HomePage() {
             </Badge>
             <Badge>
               {ranking.error
-                ? "CSV fallback · Kingshot Stats down"
+                ? "Kingshot Stats unreachable"
                 : apiConfigured
                   ? "Kingshot API connected"
-                  : "CSV mode"}
+                  : "Kingshot API key missing"}
             </Badge>
           </div>
           <h1 className="font-heading text-3xl font-black tracking-[0.12em] text-foreground uppercase sm:text-4xl">
             Kingshot Merge Planner
           </h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Kingdom {HOME_KINGDOM_ID} merge planner. When Kingshot Stats is up, pick 2 or 3
-            alliances from the top 10. While it is down, import one CSV per alliance and build
-            the same 100-player Prime roster in realtime.
+            Kingdom {HOME_KINGDOM_ID} merge planner. Pick 2 or 3 alliances from the current top 10
+            and build a shared 100-player Prime roster in realtime.
           </p>
         </header>
 

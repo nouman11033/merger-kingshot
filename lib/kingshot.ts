@@ -10,6 +10,7 @@ import {
   toPositiveInt,
   toStringOrNull,
 } from "@/lib/coerce";
+import { getKingshotApiBaseUrl, getKingshotApiKey } from "@/lib/env";
 import type {
   KingdomAllianceRank,
   KingdomAllianceRanking,
@@ -46,7 +47,6 @@ import {
  * instead of assumed.
  */
 
-const DEFAULT_BASE_URL = "https://api.kingshotstats.com/v1";
 /** The API waits up to 90s for a fresh section before returning stored data. */
 const REQUEST_TIMEOUT_MS = 100_000;
 const MAX_ATTEMPTS = 3;
@@ -121,10 +121,10 @@ function reserveRateSlot(): void {
 }
 
 function getApiKey(): string {
-  const key = process.env.KINGSHOT_API_KEY?.trim();
+  const key = getKingshotApiKey();
   if (!key) {
     throw new KingshotApiError(
-      "KINGSHOT_API_KEY is not configured on the server. Add it to .env.local, or import rosters from CSV instead.",
+      "KINGSHOT_API_KEY is not configured on the server. Set it in Vercel Project Settings → Environment Variables (Production, Preview, and Development) and redeploy.",
       { status: 500, code: "missing_server_api_key" },
     );
   }
@@ -132,13 +132,10 @@ function getApiKey(): string {
 }
 
 function getBaseUrl(): string {
-  const base = process.env.KINGSHOT_API_BASE_URL?.trim() || DEFAULT_BASE_URL;
-  return base.replace(/\/+$/, "");
+  return getKingshotApiBaseUrl();
 }
 
-export function isKingshotApiConfigured(): boolean {
-  return Boolean(process.env.KINGSHOT_API_KEY?.trim());
-}
+export { isKingshotApiConfigured } from "@/lib/env";
 
 function describeStatus(
   status: number,

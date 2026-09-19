@@ -10,7 +10,7 @@ export const TOP_ALLIANCE_LIMIT = 10;
 
 /**
  * Alliance tags that changed in this kingdom. Old tags still work in stored
- * sessions and CSV input; API calls and ranking matches use the current tag.
+ * sessions; API calls and ranking matches use the current tag.
  */
 export const ALLIANCE_TAG_RENAMES: Record<string, string> = {
   RCB: "SUN",
@@ -87,7 +87,7 @@ export function allianceTagLookupCandidates(tag: string): string[] {
   return candidates;
 }
 
-/** The single internal player shape. Both the API and CSV importers produce this. */
+/** The single internal player shape produced by the Kingshot Stats API. */
 export interface Player {
   id: string;
   /** Stable, namespaced identity from the source (never the player name). */
@@ -253,38 +253,6 @@ export interface KingdomAllianceRanking {
   retrievedAt: string;
   fromCache: boolean;
   capturedAt: string | null;
-}
-
-/** ------------------------------------------------------------------
- *  CSV import
- *  ------------------------------------------------------------------ */
-
-export interface CsvColumnMapping {
-  name: string | null;
-  power: string | null;
-  rank: string | null;
-  id: string | null;
-  hq: string | null;
-  kills: string | null;
-}
-
-export interface CsvParseResult {
-  fileName: string;
-  headers: string[];
-  mapping: CsvColumnMapping;
-  rows: NormalizedMember[];
-  previewRows: NormalizedMember[];
-  skippedRows: number;
-  errors: string[];
-}
-
-/** Payload accepted by the CSV import route (same model as API data). */
-export interface CsvImportPayload {
-  slotNumber: AllianceSlot;
-  kingdomId: string;
-  allianceTag: string;
-  allianceName?: string;
-  members: NormalizedMember[];
 }
 
 /** ------------------------------------------------------------------

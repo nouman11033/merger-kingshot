@@ -1,6 +1,7 @@
 import { errorResponse } from "@/lib/http";
 import { clearSelections } from "@/lib/sessions";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**

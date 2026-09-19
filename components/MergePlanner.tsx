@@ -7,7 +7,6 @@ import clsx from "clsx";
 import { AllianceRoster } from "@/components/AllianceRoster";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
-import { CsvImporter } from "@/components/CsvImporter";
 import { FilterBar } from "@/components/FilterBar";
 import { KingdomLadder } from "@/components/KingdomLadder";
 import { OfficerSelect } from "@/components/OfficerSelect";
@@ -35,7 +34,6 @@ import { useMergeRealtime, type RealtimeBatch } from "@/hooks/useMergeRealtime";
 import { SELECTIONS_TABLE } from "@/types/database";
 import type {
   Alliance,
-  CsvImportPayload,
   KingdomAllianceRank,
   MergeSnapshot,
   Player,
@@ -80,7 +78,7 @@ export function MergePlanner({
   const [rosterDetails, setRosterDetails] = useState(false);
   const [officerBusy, setOfficerBusy] = useState(false);
   const officerBusyRef = useRef(false);
-  const [importingCsv, setImportingCsv] = useState(false);
+  const [apiReady, setApiReady] = useState(apiConfigured);
   const [ranking, setRanking] = useState<KingdomAllianceRank[]>(initialRanking);
   const [rankingAt, setRankingAt] = useState<string | null>(rankingRetrievedAt);
   const [rankingError, setRankingError] = useState<string | null>(null);
@@ -181,13 +179,7 @@ export function MergePlanner({
     return timestamps.length ? timestamps[0] : null;
   }, [alliances]);
 
-  /** Nothing to sync when every alliance came from a CSV file. */
-  const hasApiAlliance = useMemo(
-    () => alliances.some((alliance) => alliance.source !== "csv"),
-    [alliances],
-  );
   const rankingLive = ranking.length > 0;
-  const showCsvFallback = !rankingLive || !hasApiAlliance;
 
   const officerStats = useMemo(() => {
     const all = officerPlayers(players);
@@ -471,7 +463,6 @@ export function MergePlanner({
   );
 
   const refreshRanking = useCallback(async () => {
-    if (!apiConfigured) return;
     setRankingRefreshing(true);
     try {
       const response = await fetch("/api/kingshot/alliances", { cache: "no-store" });
@@ -489,6 +480,7 @@ export function MergePlanner({
       setRanking(payload.alliances);
       setRankingAt(payload.retrievedAt ?? new Date().toISOString());
       setRankingError(null);
+      setApiReady(true);
     } catch (error) {
       setRanking([]);
       setRankingAt(null);
@@ -498,17 +490,35 @@ export function MergePlanner({
     } finally {
       setRankingRefreshing(false);
     }
-  }, [apiConfigured]);
+  }, []);
 
   useEffect(() => {
-    if (!apiConfigured) return;
+    let cancelled = false;
+    const probe = async () => {
+      try {
+        const response = await fetch("/api/kingshot/health", { cache: "no-store" });
+        const payload = (await response.json().catch(() => null)) as
+          | { config?: { kingshotApiKey?: boolean } }
+          | null;
+        if (!cancelled && payload?.config?.kingshotApiKey) setApiReady(true);
+      } catch {
+        // Ranking refresh is the real check.
+      }
+    };
+    void probe();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const kick = window.setTimeout(() => void refreshRanking(), 0);
     const timer = window.setInterval(() => void refreshRanking(), 60_000);
     return () => {
       window.clearTimeout(kick);
       window.clearInterval(timer);
     };
-  }, [apiConfigured, refreshRanking]);
+  }, [refreshRanking]);
 
   /** Re-reads the authoritative state (first subscribe, reconnect, manual sync). */
   const reloadSnapshot = useCallback(async () => {
@@ -556,7 +566,7 @@ export function MergePlanner({
           next[index] = player;
         };
 
-        // Roster changes (sync, CSV import, departures) arrive as player rows.
+        // Roster changes (sync, departures) arrive as player rows.
         for (const mutation of batch.players) {
           if (mutation.kind === "remove") {
             const index = next.findIndex((player) => player.id === mutation.id);
@@ -684,43 +694,6 @@ export function MergePlanner({
     }
   }, [applySnapshot, notify, refreshRanking, session.id]);
 
-  const importCsvRosters = useCallback(
-    async (payloads: CsvImportPayload[]) => {
-      setImportingCsv(true);
-      setSyncError(null);
-      try {
-        const response = await fetch(`/api/sessions/${session.id}/import`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imports: payloads }),
-        });
-        const payload = (await response.json().catch(() => null)) as
-          | ({ ok: boolean; error?: string; reports: SyncReport[] } & MergeSnapshot)
-          | null;
-        if (!response.ok || !payload?.ok) {
-          throw new Error(payload?.error ?? `CSV import failed (${response.status}).`);
-        }
-
-        applySnapshot({
-          session: payload.session,
-          alliances: payload.alliances,
-          players: payload.players,
-        });
-        setSyncReports(payload.reports);
-        setNow(Date.now());
-        const total = payload.reports.reduce((sum, report) => sum + report.total, 0);
-        notify(`Imported ${total} players from CSV.`, "success");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "CSV import failed.";
-        setSyncError(message);
-        notify(message, "error");
-      } finally {
-        setImportingCsv(false);
-      }
-    },
-    [applySnapshot, notify, session.id],
-  );
-
   const runClear = useCallback(async () => {
     setClearing(true);
     const previous = playersRef.current;
@@ -816,13 +789,11 @@ export function MergePlanner({
             <div className="flex flex-wrap items-center gap-2">
               <SyncButton
                 status={syncStatus}
-                disabled={!apiConfigured || !hasApiAlliance}
+                disabled={!apiReady}
                 disabledReason={
-                  !apiConfigured
-                    ? "KINGSHOT_API_KEY is not configured on the server."
-                    : !rankingLive
-                      ? "Kingshot Stats is unreachable. Import CSVs below to refresh rosters."
-                      : "Every alliance here was imported from CSV, so there is nothing to sync from the Kingshot API."
+                  !apiReady
+                    ? "KINGSHOT_API_KEY is not configured on this server. Set it in Vercel environment variables and redeploy."
+                    : undefined
                 }
                 onSync={() => void runSync()}
               />
@@ -830,40 +801,16 @@ export function MergePlanner({
           </div>
         </div>
 
-        {!apiConfigured ? (
+        {!apiReady ? (
           <Alert tone="warning" title="Roster sync unavailable">
-            The server has no <code className="font-mono">KINGSHOT_API_KEY</code>, so
-            <span className="font-semibold"> Sync Rosters</span> is disabled. Import CSVs below to
-            load or refresh alliance rosters. Realtime collaboration still works.
+            The server has no <code className="font-mono">KINGSHOT_API_KEY</code>. Set it in Vercel
+            Project Settings → Environment Variables (Production, Preview, and Development) and
+            redeploy. Do not prefix it with <code className="font-mono">NEXT_PUBLIC_</code>.
           </Alert>
         ) : !rankingLive ? (
           <Alert tone="warning" title="Kingshot Stats is unreachable">
-            Fetch and Sync need that API, which is currently down. Import one CSV per alliance below
-            to keep this merge session current.
+            Fetch and Sync need the Kingshot Stats API, which is currently down. Retry in a moment.
           </Alert>
-        ) : null}
-
-        {showCsvFallback ? (
-          <Card className="flex flex-col gap-3 p-4">
-            <div>
-              <SectionTitle>Refresh rosters from CSV</SectionTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Upload a file for each alliance you want to replace. Required columns: Name and
-                Power. Include Player ID if you want Prime ticks to survive a later API sync.
-              </p>
-            </div>
-            <CsvImporter
-              slots={alliances.map((alliance) => ({
-                slotNumber: alliance.slotNumber,
-                kingdomId: alliance.kingdomId,
-                allianceTag: alliance.allianceTag,
-                allianceName: alliance.allianceName,
-              }))}
-              busy={importingCsv}
-              submitLabel="Replace rosters from CSV"
-              onImport={importCsvRosters}
-            />
-          </Card>
         ) : null}
 
         {syncError ? (

@@ -2,13 +2,13 @@ import { errorResponse, parseMergeSize, readJson } from "@/lib/http";
 import { createSession, listSessions } from "@/lib/sessions";
 import type { AllianceInput } from "@/types/roster";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface CreateSessionRequest {
   name?: string;
   mergeSize?: number;
   alliances?: AllianceInput[];
-  source?: "api" | "csv";
 }
 
 export async function GET() {
@@ -28,7 +28,6 @@ export async function POST(request: Request) {
       name: body.name,
       mergeSize,
       alliances: body.alliances ?? [],
-      source: body.source === "csv" ? "csv" : "api",
     });
 
     return Response.json({ ok: true, session, reports }, { status: 201 });

@@ -1,6 +1,11 @@
 import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  getSupabaseAnonKey,
+  getSupabaseServiceRoleKey,
+  getSupabaseUrl,
+} from "@/lib/env";
 
 /**
  * Server-only Supabase client.
@@ -14,14 +19,12 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 let adminClient: SupabaseClient | null = null;
 
 export function hasServiceRoleKey(): boolean {
-  return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+  return Boolean(getSupabaseServiceRoleKey());
 }
 
 export function getSupabaseAdmin(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  const url = getSupabaseUrl();
+  const key = getSupabaseServiceRoleKey() || getSupabaseAnonKey();
 
   if (!url || !key) {
     throw new Error(
@@ -39,9 +42,5 @@ export function getSupabaseAdmin(): SupabaseClient {
 }
 
 export function isSupabaseConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
-      (process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()),
-  );
+  return Boolean(getSupabaseUrl() && (getSupabaseServiceRoleKey() || getSupabaseAnonKey()));
 }

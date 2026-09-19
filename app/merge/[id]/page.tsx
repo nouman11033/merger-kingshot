@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 
 import { MergePlanner } from "@/components/MergePlanner";
 import { ToastProvider } from "@/components/Toaster";
@@ -9,6 +10,7 @@ import { getSupabaseConfig } from "@/lib/supabase";
 import { isSupabaseConfigured } from "@/lib/supabase-admin";
 import { HOME_KINGDOM_ID, TOP_ALLIANCE_LIMIT, type KingdomAllianceRank } from "@/types/roster";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -39,6 +41,7 @@ async function loadRanking(): Promise<{
 }
 
 export default async function MergePage({ params }: { params: Promise<{ id: string }> }) {
+  await connection();
   const { id } = await params;
 
   if (!isSupabaseConfigured()) {

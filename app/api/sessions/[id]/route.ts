@@ -1,6 +1,7 @@
 import { errorResponse } from "@/lib/http";
 import { AppError, getSnapshot } from "@/lib/sessions";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Full snapshot for a session (used for the first paint and manual reloads). */

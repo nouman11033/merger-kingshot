@@ -67,7 +67,7 @@ function AllianceRosterComponent({
               [{alliance.allianceTag}] {alliance.allianceName}
             </h3>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Kingdom {alliance.kingdomId} · {alliance.source === "csv" ? "CSV import" : "Kingshot API"} ·
+              Kingdom {alliance.kingdomId} · Kingshot API ·
               synced {formatRelativeTime(alliance.lastSyncedAt, now)}
             </p>
           </div>
@@ -118,7 +118,7 @@ function AllianceRosterComponent({
         {players.length === 0 ? (
           <p className="px-3 py-6 text-center text-[13px] text-muted-foreground">
             {totalPlayers === 0
-              ? "No roster loaded for this alliance yet. Use SYNC ROSTERS or import a CSV."
+              ? "No roster loaded for this alliance yet. Use SYNC ROSTERS."
               : "No players match the current filters."}
           </p>
         ) : (
